@@ -5,6 +5,7 @@ mod pipeline_cache;
 mod samplers;
 mod texture;
 
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::mem::size_of;
 use std::ops::Range;
@@ -14,13 +15,46 @@ use buffer::Buffer;
 use bytemuck::{Pod, Zeroable};
 use glam::UVec2;
 use thunderdome::{Arena, Index};
+use wgpu::{Device, Queue, RenderPass};
 use yakui_core::geometry::{Rect, Vec2, Vec4};
-use yakui_core::paint::{PaintDom, Pipeline, Texture, TextureChange, TextureFormat};
+use yakui_core::paint::{
+    CustomPaintCall, PaintCall, PaintDom, Pipeline, Texture, TextureChange, TextureFormat,
+};
 use yakui_core::{ManagedTextureId, TextureId};
 
 use self::pipeline_cache::PipelineCache;
 use self::samplers::Samplers;
 use self::texture::{GpuManagedTexture, GpuTexture};
+
+pub type YakuiWgpuPaintCall = CustomPaintCall<dyn Fn(), dyn Fn(&mut RenderPass, &Device, &Queue)>;
+
+pub fn cast(call: YakuiWgpuPaintCall) -> CustomPaintCall<dyn Any, dyn Any> {
+    YakuiWgpuPaintCallWrapper(call).into()
+}
+
+struct YakuiWgpuPaintCallWrapper(YakuiWgpuPaintCall);
+
+impl From<YakuiWgpuPaintCallWrapper> for CustomPaintCall<dyn Any, dyn Any> {
+    fn from(value: YakuiWgpuPaintCallWrapper) -> Self {
+        unsafe {
+            (&value.0 as *const YakuiWgpuPaintCall as *const CustomPaintCall<dyn Any, dyn Any>)
+                .read()
+        }
+    }
+}
+
+impl From<CustomPaintCall<dyn Any, dyn Any>> for YakuiWgpuPaintCallWrapper {
+    fn from(value: CustomPaintCall<dyn Any, dyn Any>) -> Self {
+        debug_assert!(value.type_id() == TypeId::of::<YakuiWgpuPaintCall>());
+
+        unsafe {
+            YakuiWgpuPaintCallWrapper(
+                (&value as *const CustomPaintCall<dyn Any, dyn Any> as *const YakuiWgpuPaintCall)
+                    .read(),
+            )
+        }
+    }
+}
 
 pub struct YakuiWgpu {
     main_pipeline: PipelineCache,
@@ -222,9 +256,6 @@ impl YakuiWgpu {
                 ..Default::default()
             });
 
-            render_pass.set_vertex_buffer(0, vertices.slice(..));
-            render_pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
-
             let mut last_clip = None;
 
             let main_pipeline = self.main_pipeline.get(
@@ -242,128 +273,150 @@ impl YakuiWgpu {
             );
 
             for command in commands {
-                match command.pipeline {
-                    Pipeline::Main => render_pass.set_pipeline(main_pipeline),
-                    Pipeline::Text => render_pass.set_pipeline(text_pipeline),
-                    _ => continue,
-                }
+                match command {
+                    DrawCommand::Yakui(command) => {
+                        match command.pipeline {
+                            Pipeline::Main => render_pass.set_pipeline(main_pipeline),
+                            Pipeline::Text => render_pass.set_pipeline(text_pipeline),
+                            _ => continue,
+                        }
 
-                if command.clip != last_clip {
-                    last_clip = command.clip;
+                        if command.clip != last_clip {
+                            last_clip = command.clip;
 
-                    let surface = paint.surface_size().as_uvec2();
+                            let surface = paint.surface_size().as_uvec2();
 
-                    match command.clip {
-                        Some(rect) => {
-                            let pos = rect.pos().as_uvec2();
-                            let size = rect.size().as_uvec2();
+                            match command.clip {
+                                Some(rect) => {
+                                    let pos = rect.pos().as_uvec2();
+                                    let size = rect.size().as_uvec2();
 
-                            let max = (pos + size).min(surface);
-                            let size = UVec2::new(
-                                max.x.saturating_sub(pos.x),
-                                max.y.saturating_sub(pos.y),
-                            );
+                                    let max = (pos + size).min(surface);
+                                    let size = UVec2::new(
+                                        max.x.saturating_sub(pos.x),
+                                        max.y.saturating_sub(pos.y),
+                                    );
 
-                            // If the scissor rect isn't valid, we can skip this
-                            // entire draw call.
-                            if pos.x > surface.x || pos.y > surface.y || size.x == 0 || size.y == 0
-                            {
-                                continue;
+                                    // If the scissor rect isn't valid, we can skip this
+                                    // entire draw call.
+                                    if pos.x > surface.x
+                                        || pos.y > surface.y
+                                        || size.x == 0
+                                        || size.y == 0
+                                    {
+                                        continue;
+                                    }
+
+                                    render_pass.set_scissor_rect(pos.x, pos.y, size.x, size.y);
+                                }
+                                None => {
+                                    render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
+                                }
                             }
+                        }
 
-                            render_pass.set_scissor_rect(pos.x, pos.y, size.x, size.y);
-                        }
-                        None => {
-                            render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
-                        }
+                        render_pass.set_vertex_buffer(0, vertices.slice(..));
+                        render_pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                        render_pass.set_bind_group(0, &command.bind_group, &[]);
+                        render_pass.draw_indexed(command.index_range.clone(), 0, 0..1);
+                    }
+                    DrawCommand::Custom(command) => {
+                        (command.draw)(&mut render_pass, device, queue);
                     }
                 }
-
-                render_pass.set_bind_group(0, &command.bind_group, &[]);
-                render_pass.draw_indexed(command.index_range.clone(), 0, 0..1);
             }
         }
     }
 
-    fn update_buffers(&mut self, device: &wgpu::Device, paint: &PaintDom) {
+    fn update_buffers(&mut self, device: &wgpu::Device, paint: &mut PaintDom) {
         profiling::scope!("update_buffers");
 
         self.vertices.clear();
         self.indices.clear();
         self.commands.clear();
 
-        let commands = paint
-            .layers()
-            .iter()
-            .flat_map(|layer| &layer.calls)
-            .map(|call| {
-                let vertices = call.vertices.iter().map(|vertex| Vertex {
-                    pos: vertex.position,
-                    texcoord: vertex.texcoord,
-                    color: vertex.color,
-                });
+        let layers = paint.take_layers();
 
-                let base = self.vertices.len() as u32;
-                let indices = call.indices.iter().map(|&index| base + index as u32);
+        let commands = layers
+            .into_inner()
+            .into_iter()
+            .flat_map(|layer| layer.calls)
+            .map(|call| match call {
+                PaintCall::Yakui(call) => {
+                    let vertices = call.vertices.iter().map(|vertex| Vertex {
+                        pos: vertex.position,
+                        texcoord: vertex.texcoord,
+                        color: vertex.color,
+                    });
 
-                let start = self.indices.len() as u32;
-                let end = start + indices.len() as u32;
+                    let base = self.vertices.len() as u32;
+                    let indices = call.indices.iter().map(|&index| base + index as u32);
 
-                self.vertices.extend(vertices);
-                self.indices.extend(indices);
+                    let start = self.indices.len() as u32;
+                    let end = start + indices.len() as u32;
 
-                let (view, min_filter, mag_filter, mipmap_filter) = call
-                    .texture
-                    .and_then(|id| match id {
-                        TextureId::Managed(managed) => {
-                            let texture = self.managed_textures.get(&managed)?;
-                            Some((
-                                &texture.view,
-                                texture.min_filter,
-                                texture.mag_filter,
-                                wgpu::FilterMode::Nearest,
-                            ))
-                        }
-                        TextureId::User(bits) => {
-                            let index = Index::from_bits(bits)?;
-                            let texture = self.textures.get(index)?;
-                            Some((
-                                &texture.view,
-                                texture.min_filter,
-                                texture.mag_filter,
-                                texture.mipmap_filter,
-                            ))
-                        }
+                    self.vertices.extend(vertices);
+                    self.indices.extend(indices);
+
+                    let (view, min_filter, mag_filter, mipmap_filter) = call
+                        .texture
+                        .and_then(|id| match id {
+                            TextureId::Managed(managed) => {
+                                let texture = self.managed_textures.get(&managed)?;
+                                Some((
+                                    &texture.view,
+                                    texture.min_filter,
+                                    texture.mag_filter,
+                                    wgpu::FilterMode::Nearest,
+                                ))
+                            }
+                            TextureId::User(bits) => {
+                                let index = Index::from_bits(bits)?;
+                                let texture = self.textures.get(index)?;
+                                Some((
+                                    &texture.view,
+                                    texture.min_filter,
+                                    texture.mag_filter,
+                                    texture.mipmap_filter,
+                                ))
+                            }
+                        })
+                        .unwrap_or((
+                            &self.default_texture.view,
+                            self.default_texture.min_filter,
+                            self.default_texture.mag_filter,
+                            wgpu::FilterMode::Nearest,
+                        ));
+
+                    let sampler = self.samplers.get(min_filter, mag_filter, mipmap_filter);
+
+                    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("yakui Bind Group"),
+                        layout: &self.layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::TextureView(view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::Sampler(sampler),
+                            },
+                        ],
+                    });
+
+                    DrawCommand::Yakui(YakuiDrawCommand {
+                        index_range: start..end,
+                        bind_group,
+                        pipeline: call.pipeline,
+                        clip: call.clip,
                     })
-                    .unwrap_or((
-                        &self.default_texture.view,
-                        self.default_texture.min_filter,
-                        self.default_texture.mag_filter,
-                        wgpu::FilterMode::Nearest,
-                    ));
+                }
+                PaintCall::Custom(call) => {
+                    let command = YakuiWgpuPaintCallWrapper::from(call).0;
+                    (command.setup)();
 
-                let sampler = self.samplers.get(min_filter, mag_filter, mipmap_filter);
-
-                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("yakui Bind Group"),
-                    layout: &self.layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(sampler),
-                        },
-                    ],
-                });
-
-                DrawCommand {
-                    index_range: start..end,
-                    bind_group,
-                    pipeline: call.pipeline,
-                    clip: call.clip,
+                    DrawCommand::Custom(command)
                 }
             });
 
@@ -403,7 +456,12 @@ impl YakuiWgpu {
     }
 }
 
-struct DrawCommand {
+enum DrawCommand {
+    Yakui(YakuiDrawCommand),
+    Custom(YakuiWgpuPaintCall),
+}
+
+struct YakuiDrawCommand {
     index_range: Range<u32>,
     bind_group: wgpu::BindGroup,
     pipeline: Pipeline,

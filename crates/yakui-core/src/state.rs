@@ -106,9 +106,9 @@ impl Yakui {
     /// Calculates the geometry needed to render the current state and gives
     /// access to the [`PaintDom`], which holds information about how to paint
     /// widgets.
-    pub fn paint(&mut self) -> &PaintDom {
+    pub fn paint(&mut self) -> &mut PaintDom {
         self.paint.paint_all(&self.dom, &self.layout);
-        &self.paint
+        &mut self.paint
     }
 
     /// Returns access to the state's DOM.

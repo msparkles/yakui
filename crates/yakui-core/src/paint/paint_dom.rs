@@ -7,10 +7,11 @@ use crate::dom::Dom;
 use crate::geometry::Rect;
 use crate::id::{ManagedTextureId, WidgetId};
 use crate::layout::LayoutDom;
+use crate::paint::PaintCall;
 use crate::widget::PaintContext;
 
 use super::layers::PaintLayers;
-use super::primitives::{PaintCall, PaintMesh, Vertex};
+use super::primitives::{PaintMesh, Vertex, YakuiPaintCall};
 use super::texture::{Texture, TextureChange};
 
 /// Contains all information about how to paint the current set of widgets.
@@ -158,6 +159,11 @@ impl PaintDom {
         &self.layers
     }
 
+    /// Returns a list of layers that should be used to draw the UI by removing the layers and taking it as a value.
+    pub fn take_layers(&mut self) -> PaintLayers {
+        std::mem::take(&mut self.layers)
+    }
+
     /// Add a mesh to be painted.
     pub fn add_mesh<V, I>(&mut self, mesh: PaintMesh<V, I>)
     where
@@ -175,7 +181,7 @@ impl PaintDom {
 
         let current_clip = self.clip_stack.last().copied();
         let call = match layer.calls.last_mut() {
-            Some(call)
+            Some(PaintCall::Yakui(call))
                 if call.texture == texture_id
                     && call.pipeline == mesh.pipeline
                     && call.clip == current_clip =>
@@ -183,13 +189,17 @@ impl PaintDom {
                 call
             }
             _ => {
-                let mut call = PaintCall::new();
+                let mut call = YakuiPaintCall::new();
                 call.texture = texture_id;
                 call.pipeline = mesh.pipeline;
                 call.clip = current_clip;
 
-                layer.calls.push(call);
-                layer.calls.last_mut().unwrap()
+                layer.calls.push(PaintCall::Yakui(call));
+                let Some(PaintCall::Yakui(inserted)) = layer.calls.last_mut() else {
+                    return;
+                };
+
+                inserted
             }
         };
 

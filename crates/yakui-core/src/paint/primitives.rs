@@ -30,9 +30,23 @@ where
 }
 
 #[derive(Debug)]
+#[allow(missing_docs)]
+pub enum PaintCall<S: ?Sized, D: ?Sized> {
+    Yakui(YakuiPaintCall),
+    Custom(CustomPaintCall<S, D>),
+}
+
+#[derive(Debug)]
+#[allow(missing_docs)]
+pub struct CustomPaintCall<S: ?Sized, D: ?Sized> {
+    pub setup: Box<S>,
+    pub draw: Box<D>,
+}
+
+#[derive(Debug)]
 #[non_exhaustive]
 #[allow(missing_docs)]
-pub struct PaintCall {
+pub struct YakuiPaintCall {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
     pub texture: Option<TextureId>,
@@ -40,7 +54,7 @@ pub struct PaintCall {
     pub clip: Option<Rect>,
 }
 
-impl PaintCall {
+impl YakuiPaintCall {
     /// Create a new empty `PaintCall`.
     pub fn new() -> Self {
         Self {

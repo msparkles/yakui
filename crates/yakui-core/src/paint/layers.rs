@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{any::Any, ops::Deref};
 
 use super::PaintCall;
 
@@ -7,7 +7,7 @@ use super::PaintCall;
 #[non_exhaustive]
 pub struct PaintLayer {
     /// The draw calls that can be used to paint this layer.
-    pub calls: Vec<PaintCall>,
+    pub calls: Vec<PaintCall<dyn Any, dyn Any>>,
 }
 
 impl PaintLayer {
@@ -19,7 +19,7 @@ impl PaintLayer {
 
 /// Contains all of the paint layers that should be drawn, as well as
 /// information about which layer is currently actively being drawn to, if any.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PaintLayers {
     layers: Vec<PaintLayer>,
     layer_stack: Vec<usize>,
@@ -70,6 +70,11 @@ impl PaintLayers {
             top.is_some(),
             "cannot call PaintLayers::pop without a corresponding push call"
         );
+    }
+
+    /// Takes the layers and returns the inner Vector of [PaintLayer]
+    pub fn into_inner(self) -> Vec<PaintLayer> {
+        self.layers
     }
 }
 
