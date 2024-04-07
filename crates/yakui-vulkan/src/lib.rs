@@ -33,6 +33,7 @@ pub use vulkan_context::VulkanContext;
 use vulkan_texture::{UploadQueue, NO_TEXTURE_ID};
 pub use vulkan_texture::{VulkanTexture, VulkanTextureCreateInfo};
 use yakui::geometry::UVec2;
+use yakui::paint::PaintCall;
 use yakui::{paint::Vertex as YakuiVertex, ManagedTextureId};
 
 /// A struct wrapping everything needed to render yakui on Vulkan. This will be your main entry point.
@@ -634,40 +635,45 @@ impl YakuiVulkan {
         let calls = paint.layers().iter().flat_map(|layer| &layer.calls);
 
         for call in calls {
-            let base = vertices.len() as u32;
-            let index_offset = indices.len() as u32;
-            let index_count = call.indices.len() as u32;
+            match call {
+                PaintCall::Yakui(call) => {
+                    let base = vertices.len() as u32;
+                    let index_offset = indices.len() as u32;
+                    let index_count = call.indices.len() as u32;
 
-            for index in &call.indices {
-                indices.push(*index as u32 + base);
-            }
-            for vertex in &call.vertices {
-                vertices.push(vertex.into())
-            }
-
-            let texture_id = call
-                .texture
-                .and_then(|id| match id {
-                    yakui::TextureId::Managed(managed) => {
-                        let texture = self.yakui_managed_textures.get(&managed)?;
-                        Some(texture.id)
+                    for index in &call.indices {
+                        indices.push(*index as u32 + base);
                     }
-                    yakui::TextureId::User(bits) => {
-                        let texture = self
-                            .user_textures
-                            .get(thunderdome::Index::from_bits(bits)?)?;
-                        Some(texture.id)
+                    for vertex in &call.vertices {
+                        vertices.push(vertex.into())
                     }
-                })
-                .unwrap_or(NO_TEXTURE_ID);
 
-            draw_calls.push(DrawCall {
-                index_offset,
-                index_count,
-                clip: call.clip,
-                texture_id,
-                workflow: call.pipeline.into(),
-            });
+                    let texture_id = call
+                        .texture
+                        .and_then(|id| match id {
+                            yakui::TextureId::Managed(managed) => {
+                                let texture = self.yakui_managed_textures.get(&managed)?;
+                                Some(texture.id)
+                            }
+                            yakui::TextureId::User(bits) => {
+                                let texture = self
+                                    .user_textures
+                                    .get(thunderdome::Index::from_bits(bits)?)?;
+                                Some(texture.id)
+                            }
+                        })
+                        .unwrap_or(NO_TEXTURE_ID);
+
+                    draw_calls.push(DrawCall {
+                        index_offset,
+                        index_count,
+                        clip: call.clip,
+                        texture_id,
+                        workflow: call.pipeline.into(),
+                    });
+                }
+                PaintCall::Custom(_) => todo!(),
+            }
         }
 
         unsafe {
