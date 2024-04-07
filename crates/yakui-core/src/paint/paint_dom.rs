@@ -159,6 +159,11 @@ impl PaintDom {
         &self.layers
     }
 
+    /// Returns a mutable borrow to the list of layers that should be used to draw the UI.
+    pub fn layers_mut(&mut self) -> &mut PaintLayers {
+        &mut self.layers
+    }
+
     /// Returns a list of layers that should be used to draw the UI by removing the layers and taking it as a value.
     pub fn take_layers(&mut self) -> PaintLayers {
         std::mem::take(&mut self.layers)
