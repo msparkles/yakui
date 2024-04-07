@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use glam::{Vec2, Vec4};
 
 use crate::geometry::Rect;
@@ -31,16 +33,15 @@ where
 
 #[derive(Debug)]
 #[allow(missing_docs)]
-pub enum PaintCall<S: ?Sized, D: ?Sized> {
+pub enum PaintCall {
     Yakui(YakuiPaintCall),
-    Custom(CustomPaintCall<S, D>),
+    Custom(CustomPaintCall),
 }
 
 #[derive(Debug)]
 #[allow(missing_docs)]
-pub struct CustomPaintCall<S: ?Sized, D: ?Sized> {
-    pub setup: Box<S>,
-    pub draw: Box<D>,
+pub struct CustomPaintCall {
+    pub callback: Box<dyn Any>,
 }
 
 #[derive(Debug)]

@@ -103,8 +103,12 @@ impl Graphics {
             sample_count: 1,
             color_attachment: &view,
             resolve_target: None,
+            depth_format: None,
+            depth_attachment: None,
+            depth_load_op: None,
         };
-        let paint_yak = yak_renderer.paint(yak, &self.device, &self.queue, surface);
+        let paint_yak =
+            yak_renderer.paint::<(), ()>(yak, &self.device, &self.queue, surface, &mut ());
 
         let mut encoder = self
             .device

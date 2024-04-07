@@ -178,7 +178,9 @@ impl Graphics {
 
         let clear = encoder.finish();
 
-        let paint_yak = self.renderer.paint(yak, &self.device, &self.queue, surface);
+        let paint_yak =
+            self.renderer
+                .paint::<(), ()>(yak, &self.device, &self.queue, surface, &mut ());
 
         self.queue.submit([clear, paint_yak]);
         output.present();

@@ -1,4 +1,4 @@
-use std::{any::Any, ops::Deref};
+use std::ops::Deref;
 
 use super::PaintCall;
 
@@ -7,7 +7,7 @@ use super::PaintCall;
 #[non_exhaustive]
 pub struct PaintLayer {
     /// The draw calls that can be used to paint this layer.
-    pub calls: Vec<PaintCall<dyn Any, dyn Any>>,
+    pub calls: Vec<PaintCall>,
 }
 
 impl PaintLayer {
