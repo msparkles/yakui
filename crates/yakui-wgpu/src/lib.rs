@@ -15,7 +15,6 @@ use buffer::Buffer;
 use bytemuck::{Pod, Zeroable};
 use glam::UVec2;
 use thunderdome::{Arena, Index};
-use wgpu::{Device, Queue, RenderPass};
 use yakui_core::geometry::{Rect, Vec2, Vec4};
 use yakui_core::paint::{
     CustomPaintCall, PaintCall, PaintDom, Pipeline, Texture, TextureChange, TextureFormat,
@@ -26,7 +25,8 @@ use self::pipeline_cache::PipelineCache;
 use self::samplers::Samplers;
 use self::texture::{GpuManagedTexture, GpuTexture};
 
-pub type YakuiWgpuPaintCall = CustomPaintCall<dyn Fn(), dyn Fn(&mut RenderPass, &Device, &Queue)>;
+pub type YakuiWgpuPaintCall =
+    CustomPaintCall<dyn Fn(), dyn Fn(&mut wgpu::RenderPass, &wgpu::Device, &wgpu::Queue)>;
 
 pub fn cast(call: YakuiWgpuPaintCall) -> CustomPaintCall<dyn Any, dyn Any> {
     YakuiWgpuPaintCallWrapper(call).into()
@@ -76,6 +76,9 @@ pub struct SurfaceInfo<'a> {
     pub sample_count: u32,
     pub color_attachment: &'a wgpu::TextureView,
     pub resolve_target: Option<&'a wgpu::TextureView>,
+    pub depth_format: Option<wgpu::TextureFormat>,
+    pub depth_attachment: Option<&'a wgpu::TextureView>,
+    pub depth_load_op: Option<wgpu::LoadOp<f32>>,
 }
 
 #[derive(Debug, Clone, Copy, Zeroable, Pod)]
@@ -253,23 +256,49 @@ impl YakuiWgpu {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
+                depth_stencil_attachment: surface.depth_attachment.zip(surface.depth_load_op).map(
+                    |(view, load_op)| wgpu::RenderPassDepthStencilAttachment {
+                        view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: load_op,
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    },
+                ),
                 ..Default::default()
             });
 
             let mut last_clip = None;
 
             let main_pipeline = self.main_pipeline.get(
-                device,
                 surface.format,
+                surface.depth_format,
                 surface.sample_count,
-                make_main_pipeline,
+                |layout| {
+                    make_main_pipeline(
+                        device,
+                        layout,
+                        surface.format,
+                        surface.depth_format,
+                        surface.sample_count,
+                    )
+                },
             );
 
             let text_pipeline = self.text_pipeline.get(
-                device,
                 surface.format,
+                surface.depth_format,
                 surface.sample_count,
-                make_text_pipeline,
+                |layout| {
+                    make_text_pipeline(
+                        device,
+                        layout,
+                        surface.format,
+                        surface.depth_format,
+                        surface.sample_count,
+                    )
+                },
             );
 
             for command in commands {
@@ -472,6 +501,7 @@ fn make_main_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     format: wgpu::TextureFormat,
+    depth_format: Option<wgpu::TextureFormat>,
     samples: u32,
 ) -> wgpu::RenderPipeline {
     let main_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -505,7 +535,13 @@ fn make_main_pipeline(
             unclipped_depth: false,
             conservative: false,
         },
-        depth_stencil: None,
+        depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
+            format,
+            depth_write_enabled: false,
+            depth_compare: wgpu::CompareFunction::Always,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: wgpu::MultisampleState {
             count: samples,
             ..Default::default()
@@ -518,6 +554,7 @@ fn make_text_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     format: wgpu::TextureFormat,
+    depth_format: Option<wgpu::TextureFormat>,
     samples: u32,
 ) -> wgpu::RenderPipeline {
     let text_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -551,7 +588,13 @@ fn make_text_pipeline(
             unclipped_depth: false,
             conservative: false,
         },
-        depth_stencil: None,
+        depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
+            format,
+            depth_write_enabled: false,
+            depth_compare: wgpu::CompareFunction::Always,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: wgpu::MultisampleState {
             count: samples,
             ..Default::default()

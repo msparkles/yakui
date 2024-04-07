@@ -6,6 +6,7 @@ pub struct PipelineCache {
 struct Cached {
     pipeline: wgpu::RenderPipeline,
     format: wgpu::TextureFormat,
+    depth_format: Option<wgpu::TextureFormat>,
     samples: u32,
 }
 
@@ -19,27 +20,29 @@ impl PipelineCache {
 
     pub fn get<'a, F>(
         &'a mut self,
-        device: &wgpu::Device,
         format: wgpu::TextureFormat,
+        depth_format: Option<wgpu::TextureFormat>,
         samples: u32,
         init: F,
     ) -> &'a wgpu::RenderPipeline
     where
-        F: FnOnce(
-            &wgpu::Device,
-            &wgpu::PipelineLayout,
-            wgpu::TextureFormat,
-            u32,
-        ) -> wgpu::RenderPipeline,
+        F: FnOnce(&wgpu::PipelineLayout) -> wgpu::RenderPipeline,
     {
         match &mut self.current {
-            Some(existing) if existing.format == format && existing.samples == samples => (),
+            Some(existing)
+                if existing.format == format
+                    && existing.samples == samples
+                    && existing.depth_format == depth_format =>
+            {
+                ()
+            }
             _ => {
-                let pipeline = init(device, &self.layout, format, samples);
+                let pipeline = init(&self.layout);
 
                 self.current = Some(Cached {
                     pipeline,
                     format,
+                    depth_format,
                     samples,
                 });
             }

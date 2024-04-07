@@ -36,6 +36,9 @@ impl Multisampling {
                 sample_count,
                 color_attachment: view,
                 resolve_target: None,
+                depth_format: None,
+                depth_attachment: None,
+                depth_load_op: None,
             };
         }
 
@@ -63,6 +66,9 @@ impl Multisampling {
             sample_count,
             color_attachment: ms_view,
             resolve_target: Some(view),
+            depth_format: None,
+            depth_attachment: None,
+            depth_load_op: None,
         }
     }
 }
