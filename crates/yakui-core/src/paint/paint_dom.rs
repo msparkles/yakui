@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use glam::Vec2;
-use thunderdome::Arena;
+use thunderdome::{Arena, Index};
 
 use crate::dom::Dom;
 use crate::geometry::Rect;
@@ -24,7 +24,8 @@ pub struct PaintDom {
     scale_factor: f32,
 
     layers: PaintLayers,
-    clip_stack: Vec<Rect>,
+    clip_stack: Arena<Vec<Rect>>,
+    current_clip_id: Option<Index>,
 }
 
 impl PaintDom {
@@ -37,7 +38,8 @@ impl PaintDom {
             unscaled_viewport: Rect::ONE,
             scale_factor: 1.0,
             layers: PaintLayers::new(),
-            clip_stack: Vec::new(),
+            clip_stack: Arena::new(),
+            current_clip_id: None,
         }
     }
 
@@ -45,6 +47,7 @@ impl PaintDom {
     pub fn start(&mut self) {
         self.texture_edits.clear();
         self.clip_stack.clear();
+        self.current_clip_id = None;
     }
 
     /// Returns the size of the surface that is being painted onto.
@@ -73,11 +76,20 @@ impl PaintDom {
         profiling::scope!("PaintDom::paint");
 
         let layout_node = layout.get(id).unwrap();
-        if layout_node.clipping_enabled {
-            self.push_clip(layout_node.rect);
-        }
+
         if layout_node.new_layer {
             self.layers.push();
+        }
+        if Some(layout_node.clip_stack_id) != self.current_clip_id {
+            self.current_clip_id = Some(layout_node.clip_stack_id);
+
+            if !self.clip_stack.contains(layout_node.clip_stack_id) {
+                self.clip_stack
+                    .insert_at(layout_node.clip_stack_id, Vec::new());
+            }
+        }
+        if layout_node.clipping_enabled {
+            self.push_clip(layout_node.rect);
         }
 
         dom.enter(id);
@@ -184,7 +196,10 @@ impl PaintDom {
             .current_mut()
             .expect("an active layer is required to call add_mesh");
 
-        let current_clip = self.clip_stack.last().copied();
+        let current_clip_id = self.current_clip_id.unwrap();
+        let clip_stack = self.clip_stack.get(current_clip_id).unwrap();
+        let current_clip = clip_stack.last().copied();
+
         let call = match layer.calls.last_mut() {
             Some(PaintCall::Yakui(call))
                 if call.texture == texture_id
@@ -231,16 +246,26 @@ impl PaintDom {
             region.size() * self.scale_factor,
         );
 
-        if let Some(previous) = self.clip_stack.last() {
+        let current_clip_id = self.current_clip_id.unwrap();
+        let clip_stack = self.clip_stack.get_mut(current_clip_id).unwrap();
+
+        if let Some(previous) = clip_stack.last() {
             unscaled = unscaled.constrain(*previous);
         }
 
-        self.clip_stack.push(unscaled);
+        clip_stack.push(unscaled);
     }
 
     /// Pop the most recent clip region, restoring the previous clipping rect.
     fn pop_clip(&mut self) {
-        let top = self.clip_stack.pop();
+        let current_clip_id = self.current_clip_id.unwrap();
+
+        let top = {
+            let clip_stack = self.clip_stack.get_mut(current_clip_id).unwrap();
+
+            clip_stack.pop()
+        };
+
         debug_assert!(
             top.is_some(),
             "cannot call pop_clip without a corresponding push_clip call"

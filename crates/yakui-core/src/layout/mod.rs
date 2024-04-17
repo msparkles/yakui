@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 
 use glam::Vec2;
-use thunderdome::Arena;
+use thunderdome::{Arena, Index};
 
 use crate::dom::Dom;
 use crate::event::EventInterest;
@@ -17,7 +17,8 @@ use crate::widget::LayoutContext;
 #[derive(Debug)]
 pub struct LayoutDom {
     nodes: Arena<LayoutDomNode>,
-    clip_stack: Vec<WidgetId>,
+    clip_stack: Arena<Vec<WidgetId>>,
+    current_clip_stack: Option<Index>,
 
     unscaled_viewport: Rect,
     scale_factor: f32,
@@ -44,6 +45,9 @@ pub struct LayoutDomNode {
 
     /// What events the widget reported interest in.
     pub event_interest: EventInterest,
+
+    /// Which clip stack the widget belongs in.
+    pub clip_stack_id: Index,
 }
 
 impl LayoutDom {
@@ -51,7 +55,8 @@ impl LayoutDom {
     pub fn new() -> Self {
         Self {
             nodes: Arena::new(),
-            clip_stack: Vec::new(),
+            clip_stack: Arena::new(),
+            current_clip_stack: None,
 
             unscaled_viewport: Rect::ONE,
             scale_factor: 1.0,
@@ -120,6 +125,7 @@ impl LayoutDom {
         log::debug!("LayoutDom::calculate_all()");
 
         self.clip_stack.clear();
+        self.current_clip_stack = None;
         self.interest_mouse.clear();
 
         let constraints = Constraints::tight(self.viewport().size());
@@ -141,6 +147,7 @@ impl LayoutDom {
         constraints: Constraints,
     ) -> Vec2 {
         dom.enter(id);
+
         let dom_node = dom.get(id).unwrap();
 
         let context = LayoutContext {
@@ -168,16 +175,24 @@ impl LayoutDom {
             self.interest_mouse.pop_layer();
         }
 
+        if self.current_clip_stack.is_none() {
+            self.new_clip_stack(dom);
+        }
+
+        // There should always be a currently active clip stack.
+        let clip_stack_id = self.current_clip_stack.unwrap();
+        let clip_stack = self.clip_stack.get_mut(clip_stack_id).unwrap();
+
         // If the widget called enable_clipping() during layout, it will be on
         // top of the clip stack at this point.
-        let clipping_enabled = self.clip_stack.last() == Some(&id);
+        let clipping_enabled = clip_stack.last() == Some(&id);
 
         // If this node enabled clipping, the next node under that is the node
         // that clips this one.
         let clipped_by = if clipping_enabled {
-            self.clip_stack.iter().nth_back(2).copied()
+            clip_stack.iter().nth_back(2).copied()
         } else {
-            self.clip_stack.last().copied()
+            clip_stack.last().copied()
         };
 
         self.nodes.insert_at(
@@ -188,11 +203,12 @@ impl LayoutDom {
                 new_layer,
                 clipped_by,
                 event_interest,
+                clip_stack_id,
             },
         );
 
         if clipping_enabled {
-            self.clip_stack.pop();
+            clip_stack.pop();
         }
 
         dom.exit(id);
@@ -201,7 +217,18 @@ impl LayoutDom {
 
     /// Enables clipping for the currently active widget.
     pub fn enable_clipping(&mut self, dom: &Dom) {
-        self.clip_stack.push(dom.current());
+        self.clip_stack
+            .get_mut(self.current_clip_stack.unwrap())
+            .unwrap()
+            .push(dom.current());
+    }
+
+    /// Create a new clip stack for the currently active widget.
+    pub fn new_clip_stack(&mut self, dom: &Dom) {
+        self.current_clip_stack = Some(dom.current().index());
+        let old = self.clip_stack.insert_at(dom.current().index(), Vec::new());
+        debug_assert!(old.is_none(), "clip_stack id clashed");
+        self.enable_clipping(dom);
     }
 
     /// Put this widget and its children into a new layer.

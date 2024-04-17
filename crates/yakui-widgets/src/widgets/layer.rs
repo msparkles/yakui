@@ -46,6 +46,7 @@ impl Widget for LayerWidget {
 
     fn layout(&self, mut ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
         ctx.layout.new_layer(ctx.dom);
+        ctx.layout.new_clip_stack(ctx.dom);
 
         let node = ctx.dom.get_current();
         let mut size = Vec2::ZERO;

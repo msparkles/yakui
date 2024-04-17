@@ -507,7 +507,7 @@ fn hit_test(_dom: &Dom, layout: &LayoutDom, coords: Vec2, output: &mut Vec<Widge
 
         let mut rect = layout_node.rect;
         let mut node = layout_node;
-        while let Some(parent) = node.clipped_by {
+        if let Some(parent) = node.clipped_by {
             node = layout.get(parent).unwrap();
             rect = rect.constrain(node.rect);
         }
