@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use glam::Vec2;
-use thunderdome::{Arena, Index};
+use thunderdome::Arena;
 
 use crate::dom::Dom;
 use crate::geometry::Rect;
@@ -24,8 +24,8 @@ pub struct PaintDom {
     scale_factor: f32,
 
     layers: PaintLayers,
-    clip_stack: Arena<Vec<Rect>>,
-    current_clip_id: Option<Index>,
+    clip_stack: Arena<Rect>,
+    currently_clipped_by: Option<WidgetId>,
 }
 
 impl PaintDom {
@@ -39,7 +39,7 @@ impl PaintDom {
             scale_factor: 1.0,
             layers: PaintLayers::new(),
             clip_stack: Arena::new(),
-            current_clip_id: None,
+            currently_clipped_by: None,
         }
     }
 
@@ -47,7 +47,7 @@ impl PaintDom {
     pub fn start(&mut self) {
         self.texture_edits.clear();
         self.clip_stack.clear();
-        self.current_clip_id = None;
+        self.currently_clipped_by = None;
     }
 
     /// Returns the size of the surface that is being painted onto.
@@ -80,16 +80,18 @@ impl PaintDom {
         if layout_node.new_layer {
             self.layers.push();
         }
-        if Some(layout_node.clip_stack_id) != self.current_clip_id {
-            self.current_clip_id = Some(layout_node.clip_stack_id);
 
-            if !self.clip_stack.contains(layout_node.clip_stack_id) {
-                self.clip_stack
-                    .insert_at(layout_node.clip_stack_id, Vec::new());
-            }
-        }
         if layout_node.clipping_enabled {
-            self.push_clip(layout_node.rect);
+            self.push_clip(layout_node.rect, id);
+            self.currently_clipped_by = Some(id);
+        }
+
+        if layout_node.clipped_by.is_some() {
+            self.currently_clipped_by = layout_node.clipped_by;
+            self.push_clip(
+                layout.get(layout_node.clipped_by.unwrap()).unwrap().rect,
+                layout_node.clipped_by.unwrap(),
+            );
         }
 
         dom.enter(id);
@@ -105,11 +107,13 @@ impl PaintDom {
         dom.exit(id);
 
         if layout_node.clipping_enabled {
-            self.pop_clip();
+            self.pop_clip(id);
         }
         if layout_node.new_layer {
             self.layers.pop();
         }
+
+        self.currently_clipped_by = None
     }
 
     /// Paint all of the widgets in the given DOM.
@@ -196,9 +200,9 @@ impl PaintDom {
             .current_mut()
             .expect("an active layer is required to call add_mesh");
 
-        let current_clip_id = self.current_clip_id.unwrap();
-        let clip_stack = self.clip_stack.get(current_clip_id).unwrap();
-        let current_clip = clip_stack.last().copied();
+        let current_clip = self
+            .currently_clipped_by
+            .and_then(|id| self.clip_stack.get(id.index()).cloned());
 
         let call = match layer.calls.last_mut() {
             Some(PaintCall::Yakui(call))
@@ -240,31 +244,26 @@ impl PaintDom {
     }
 
     /// Use the given region as the clipping rect for all following paint calls.
-    fn push_clip(&mut self, region: Rect) {
+    fn push_clip(&mut self, region: Rect, id: WidgetId) {
         let mut unscaled = Rect::from_pos_size(
             region.pos() * self.scale_factor,
             region.size() * self.scale_factor,
         );
 
-        let current_clip_id = self.current_clip_id.unwrap();
-        let clip_stack = self.clip_stack.get_mut(current_clip_id).unwrap();
+        let previous = self
+            .currently_clipped_by
+            .and_then(|id| self.clip_stack.get(id.index()));
 
-        if let Some(previous) = clip_stack.last() {
+        if let Some(previous) = previous {
             unscaled = unscaled.constrain(*previous);
         }
 
-        clip_stack.push(unscaled);
+        self.clip_stack.insert_at(id.index(), unscaled);
     }
 
     /// Pop the most recent clip region, restoring the previous clipping rect.
-    fn pop_clip(&mut self) {
-        let current_clip_id = self.current_clip_id.unwrap();
-
-        let top = {
-            let clip_stack = self.clip_stack.get_mut(current_clip_id).unwrap();
-
-            clip_stack.pop()
-        };
+    fn pop_clip(&mut self, id: WidgetId) {
+        let top = self.clip_stack.remove(id.index());
 
         debug_assert!(
             top.is_some(),
