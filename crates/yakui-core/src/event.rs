@@ -139,6 +139,9 @@ bitflags::bitflags! {
         /// If this widget is focused, it should receive keyboard events.
         const FOCUSED_KEYBOARD = 16;
 
+        /// Receives keys even when widget is not focused.
+        const CAPTURE_KEYS = 32;
+
         /// Notify this widget of all mouse events.
         const MOUSE_ALL = Self::MOUSE_INSIDE.bits() | Self::MOUSE_OUTSIDE.bits() | Self::MOUSE_MOVE.bits();
     }

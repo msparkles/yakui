@@ -9,7 +9,7 @@ use crate::dom::Dom;
 use crate::event::EventInterest;
 use crate::geometry::{Constraints, Rect};
 use crate::id::WidgetId;
-use crate::input::{InputState, MouseInterest};
+use crate::input::{InputState, Interests};
 use crate::widget::LayoutContext;
 
 /// Contains information on how each widget in the DOM is laid out and what
@@ -23,7 +23,7 @@ pub struct LayoutDom {
     unscaled_viewport: Rect,
     scale_factor: f32,
 
-    pub(crate) interest_mouse: MouseInterest,
+    pub(crate) interests: Interests,
 }
 
 /// A node in a [`LayoutDom`].
@@ -61,7 +61,7 @@ impl LayoutDom {
             unscaled_viewport: Rect::ONE,
             scale_factor: 1.0,
 
-            interest_mouse: MouseInterest::new(),
+            interests: Interests::new(),
         }
     }
 
@@ -126,7 +126,7 @@ impl LayoutDom {
 
         self.clip_stack.clear();
         self.current_clip_stack = None;
-        self.interest_mouse.clear();
+        self.interests.clear();
 
         let constraints = Constraints::tight(self.viewport().size());
 
@@ -160,19 +160,21 @@ impl LayoutDom {
 
         // If the widget called new_layer() during layout, it will be on top of
         // the mouse interest layer stack.
-        let new_layer = self.interest_mouse.current_layer_root() == Some(id);
+        let new_layer = self.interests.current_layer_root() == Some(id);
 
         // Mouse interest will be registered into the layout created by the
         // widget if there is one.
         let event_interest = dom_node.widget.event_interest();
-        if event_interest.intersects(EventInterest::MOUSE_ALL) {
-            self.interest_mouse.insert(id, event_interest);
+        if event_interest.intersects(EventInterest::MOUSE_ALL)
+            || event_interest.intersects(EventInterest::CAPTURE_KEYS)
+        {
+            self.interests.insert(id, event_interest);
         }
 
         // If the widget created a new layer, we're done with it now, so it's
         // time to clean it up.
         if new_layer {
-            self.interest_mouse.pop_layer();
+            self.interests.pop_layer();
         }
 
         if self.current_clip_stack.is_none() {
@@ -233,7 +235,7 @@ impl LayoutDom {
 
     /// Put this widget and its children into a new layer.
     pub fn new_layer(&mut self, dom: &Dom) {
-        self.interest_mouse.push_layer(dom.current());
+        self.interests.push_layer(dom.current());
     }
 
     /// Set the position of a widget.

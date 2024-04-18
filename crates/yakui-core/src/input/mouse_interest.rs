@@ -2,12 +2,12 @@ use crate::event::EventInterest;
 use crate::WidgetId;
 
 #[derive(Debug)]
-pub(crate) struct MouseInterest {
+pub(crate) struct Interests {
     layers: Vec<Vec<(WidgetId, EventInterest)>>,
     layer_stack: Vec<(WidgetId, usize)>,
 }
 
-impl MouseInterest {
+impl Interests {
     pub fn new() -> Self {
         Self {
             layers: Vec::new(),
