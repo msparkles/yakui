@@ -219,6 +219,11 @@ impl LayoutDom {
 
     /// Enables clipping for the currently active widget.
     pub fn enable_clipping(&mut self, dom: &Dom) {
+        if self.current_clip_stack.is_none() {
+            self.current_clip_stack = Some(dom.current().index());
+            self.clip_stack.insert_at(dom.current().index(), Vec::new());
+        }
+
         self.clip_stack
             .get_mut(self.current_clip_stack.unwrap())
             .unwrap()
