@@ -136,8 +136,12 @@ impl InputState {
 
     /// Returns the current mouse position, or None if it is outside of the window.
     /// Should not be used to detect input!
-    pub fn get_mouse_position(&self) -> Option<Vec2> {
-        self.mouse.borrow().position.clone()
+    pub fn get_mouse_position(&self, layout: &LayoutDom) -> Option<Vec2> {
+        self.mouse
+            .borrow()
+            .position
+            .map(|p| p / layout.scale_factor())
+            .clone()
     }
 
     pub(crate) fn handle_event(
