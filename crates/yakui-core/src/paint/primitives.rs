@@ -52,7 +52,6 @@ pub struct YakuiPaintCall {
     pub indices: Vec<u16>,
     pub texture: Option<TextureId>,
     pub pipeline: Pipeline,
-    pub clip: Option<Rect>,
 }
 
 impl YakuiPaintCall {
@@ -63,7 +62,6 @@ impl YakuiPaintCall {
             indices: Vec::new(),
             texture: None,
             pipeline: Pipeline::Main,
-            clip: None,
         }
     }
 }

@@ -185,6 +185,12 @@ impl PaintDom {
         std::mem::take(&mut self.layers)
     }
 
+    /// Returns the current clip rect
+    pub fn get_current_clip(&self) -> Option<Rect> {
+        self.currently_clipped_by
+            .and_then(|id| self.clip_stack.get(id.index()).cloned())
+    }
+
     /// Add a mesh to be painted.
     pub fn add_mesh<V, I>(&mut self, mesh: PaintMesh<V, I>)
     where
@@ -195,20 +201,18 @@ impl PaintDom {
 
         let texture_id = mesh.texture.map(|(index, _rect)| index);
 
+        let current_clip = self.get_current_clip();
+
         let layer = self
             .layers
             .current_mut()
             .expect("an active layer is required to call add_mesh");
 
-        let current_clip = self
-            .currently_clipped_by
-            .and_then(|id| self.clip_stack.get(id.index()).cloned());
-
         let call = match layer.calls.last_mut() {
-            Some(PaintCall::Yakui(call))
+            Some((PaintCall::Yakui(call), clip))
                 if call.texture == texture_id
                     && call.pipeline == mesh.pipeline
-                    && call.clip == current_clip =>
+                    && *clip == current_clip =>
             {
                 call
             }
@@ -216,10 +220,9 @@ impl PaintDom {
                 let mut call = YakuiPaintCall::new();
                 call.texture = texture_id;
                 call.pipeline = mesh.pipeline;
-                call.clip = current_clip;
 
-                layer.calls.push(PaintCall::Yakui(call));
-                let Some(PaintCall::Yakui(inserted)) = layer.calls.last_mut() else {
+                layer.calls.push((PaintCall::Yakui(call), current_clip));
+                let Some((PaintCall::Yakui(inserted), ..)) = layer.calls.last_mut() else {
                     return;
                 };
 
@@ -250,12 +253,10 @@ impl PaintDom {
             region.size() * self.scale_factor,
         );
 
-        let previous = self
-            .currently_clipped_by
-            .and_then(|id| self.clip_stack.get(id.index()));
+        let previous = self.get_current_clip();
 
         if let Some(previous) = previous {
-            unscaled = unscaled.constrain(*previous);
+            unscaled = unscaled.constrain(previous);
         }
 
         self.clip_stack.insert_at(id.index(), unscaled);

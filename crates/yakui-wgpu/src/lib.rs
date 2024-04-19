@@ -330,8 +330,8 @@ impl YakuiWgpu {
 
         for command in &commands {
             match command {
-                DrawCommand::Yakui(_) => {}
-                DrawCommand::Custom(command) => {
+                (DrawCommand::Yakui(_), ..) => {}
+                (DrawCommand::Custom(command), ..) => {
                     command.finish_prepare(device, queue, custom_paint_resoucres);
                 }
             }
@@ -341,19 +341,13 @@ impl YakuiWgpu {
 
         for command in &commands {
             match command {
-                DrawCommand::Yakui(command) => {
-                    match command.pipeline {
-                        Pipeline::Main => render_pass.set_pipeline(main_pipeline),
-                        Pipeline::Text => render_pass.set_pipeline(text_pipeline),
-                        _ => continue,
-                    }
-
-                    if command.clip != last_clip {
-                        last_clip = command.clip;
+                (DrawCommand::Yakui(..), clip) | (DrawCommand::Custom(..), clip) => {
+                    if *clip != last_clip {
+                        last_clip = *clip;
 
                         let surface = paint.surface_size().as_uvec2();
 
-                        match command.clip {
+                        match clip {
                             Some(rect) => {
                                 let pos = rect.pos().as_uvec2();
                                 let size = rect.size().as_uvec2();
@@ -381,6 +375,16 @@ impl YakuiWgpu {
                             }
                         }
                     }
+                }
+            }
+
+            match command {
+                (DrawCommand::Yakui(command), ..) => {
+                    match command.pipeline {
+                        Pipeline::Main => render_pass.set_pipeline(main_pipeline),
+                        Pipeline::Text => render_pass.set_pipeline(text_pipeline),
+                        _ => continue,
+                    }
 
                     render_pass.set_vertex_buffer(0, vertices.slice(..));
                     render_pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -391,7 +395,7 @@ impl YakuiWgpu {
                     );
                     render_pass.draw_indexed(command.index_range.clone(), 0, 0..1);
                 }
-                DrawCommand::Custom(command) => {
+                (DrawCommand::Custom(command), ..) => {
                     command.paint(render_pass, device, queue, custom_paint_resoucres);
                 }
             }
@@ -399,7 +403,7 @@ impl YakuiWgpu {
     }
 
     fn update_buffers<'a, T: 'static, C: CallbackTrait<T> + 'static>(
-        commands: &mut Vec<DrawCommand<T>>,
+        commands: &mut Vec<(DrawCommand<T>, Option<Rect>)>,
         vertices: &'a mut Buffer,
         indices: &'a mut Buffer,
         managed_textures: &HashMap<ManagedTextureId, GpuManagedTexture>,
@@ -427,7 +431,7 @@ impl YakuiWgpu {
                 .into_iter()
                 .flat_map(|layer| layer.calls)
                 .map(|call| match call {
-                    PaintCall::Yakui(call) => {
+                    (PaintCall::Yakui(call), clip) => {
                         let v = call.vertices.iter().map(|vertex| Vertex {
                             pos: vertex.position,
                             texcoord: vertex.texcoord,
@@ -490,18 +494,20 @@ impl YakuiWgpu {
                             ],
                         });
 
-                        DrawCommand::Yakui(YakuiDrawCommand {
-                            index_range: start..end,
-                            bind_group: bind_groups.insert(bind_group),
-                            pipeline: call.pipeline,
-                            clip: call.clip,
-                        })
+                        (
+                            DrawCommand::Yakui(YakuiDrawCommand {
+                                index_range: start..end,
+                                bind_group: bind_groups.insert(bind_group),
+                                pipeline: call.pipeline,
+                            }),
+                            clip,
+                        )
                     }
-                    PaintCall::Custom(call) => {
+                    (PaintCall::Custom(call), clip) => {
                         let command = call.callback.downcast::<C>().unwrap();
                         command.prepare(custom_resources);
 
-                        DrawCommand::Custom(command)
+                        (DrawCommand::Custom(command), clip)
                     }
                 }),
         );
@@ -554,7 +560,6 @@ pub struct YakuiDrawCommand {
     index_range: Range<u32>,
     bind_group: Index,
     pipeline: Pipeline,
-    clip: Option<Rect>,
 }
 
 fn make_main_pipeline(

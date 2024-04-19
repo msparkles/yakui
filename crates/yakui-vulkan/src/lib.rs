@@ -636,7 +636,7 @@ impl YakuiVulkan {
 
         for call in calls {
             match call {
-                PaintCall::Yakui(call) => {
+                (PaintCall::Yakui(call), clip) => {
                     let base = vertices.len() as u32;
                     let index_offset = indices.len() as u32;
                     let index_count = call.indices.len() as u32;
@@ -667,12 +667,12 @@ impl YakuiVulkan {
                     draw_calls.push(DrawCall {
                         index_offset,
                         index_count,
-                        clip: call.clip,
+                        clip: *clip,
                         texture_id,
                         workflow: call.pipeline.into(),
                     });
                 }
-                PaintCall::Custom(_) => todo!(),
+                (PaintCall::Custom(_), ..) => todo!(),
             }
         }
 
