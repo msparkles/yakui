@@ -1,3 +1,4 @@
+mod absolute;
 mod align;
 mod button;
 mod canvas;
@@ -32,6 +33,7 @@ mod textbox;
 mod unconstrained_box;
 mod window;
 
+pub use self::absolute::*;
 pub use self::align::*;
 pub use self::button::*;
 pub use self::canvas::*;

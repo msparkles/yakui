@@ -220,6 +220,10 @@ impl Widget for ListWidget {
                     child_layout.rect.set_pos(anchor + offset);
                 }
 
+                Flow::Absolute { .. } => {
+                    ctx.calculate_layout(child_id, Constraints::none());
+                }
+
                 other => unimplemented!("Flow::{other:?}"),
             }
         }

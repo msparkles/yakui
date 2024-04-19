@@ -11,6 +11,7 @@ use crate::geometry::{Constraints, Rect};
 use crate::id::WidgetId;
 use crate::input::{InputState, Interests};
 use crate::widget::LayoutContext;
+use crate::Flow;
 
 /// Contains information on how each widget in the DOM is laid out and what
 /// events they're interested in.
@@ -251,6 +252,7 @@ impl LayoutDom {
     }
 
     fn resolve_positions(&mut self, dom: &Dom) {
+        let viewport = self.viewport();
         let mut queue = VecDeque::new();
 
         queue.push_back((dom.root(), Vec2::ZERO));
@@ -258,9 +260,17 @@ impl LayoutDom {
         while let Some((id, parent_pos)) = queue.pop_front() {
             if let Some(layout_node) = self.nodes.get_mut(id.index()) {
                 let node = dom.get(id).unwrap();
-                layout_node
-                    .rect
-                    .set_pos(layout_node.rect.pos() + parent_pos);
+
+                if let Flow::Absolute { anchor, offset } = node.widget.flow() {
+                    let anchor = viewport.size() * anchor.as_vec2();
+                    let offset = offset.resolve(viewport.size());
+
+                    layout_node.rect.set_pos(anchor + offset);
+                } else {
+                    layout_node
+                        .rect
+                        .set_pos(layout_node.rect.pos() + parent_pos);
+                }
 
                 queue.extend(node.children.iter().map(|&id| (id, layout_node.rect.pos())));
             }

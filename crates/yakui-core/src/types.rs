@@ -20,6 +20,15 @@ pub enum Flow {
         /// The offset from the anchor to position this widget at.
         offset: Dim2,
     },
+
+    /// The widget does not participate in layout. Its position is relative to the viewport.
+    Absolute {
+        /// Where in the viewport that this widget should be anchor to.
+        anchor: Alignment,
+
+        /// The offset from the anchor to position this widget at.
+        offset: Dim2,
+    },
 }
 
 /// Defines sizing along a container's main axis.
