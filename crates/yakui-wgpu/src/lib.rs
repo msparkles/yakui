@@ -345,7 +345,10 @@ impl YakuiWgpu {
                     if *clip != last_clip {
                         last_clip = *clip;
 
-                        let surface = paint.surface_size().as_uvec2();
+                        let surface = paint.surface_size();
+                        render_pass.set_viewport(0.0, 0.0, surface.x, surface.y, 0.0, 1.0);
+
+                        let surface = surface.as_uvec2();
 
                         match clip {
                             Some(rect) => {
