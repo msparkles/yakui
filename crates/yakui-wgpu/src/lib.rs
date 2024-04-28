@@ -278,6 +278,13 @@ impl YakuiWgpu {
             return;
         }
 
+        let mut commands = Vec::new();
+
+        self.update_buffers::<T, C>(&mut commands, device, paint, custom_paint_resoucres);
+
+        let vertices = self.vertices.upload(device, queue);
+        let indices = self.indices.upload(device, queue);
+
         let main_pipeline = self.main_pipeline.get(
             surface.format,
             surface.depth_format,
@@ -307,26 +314,6 @@ impl YakuiWgpu {
                 )
             },
         );
-
-        let mut commands = Vec::new();
-
-        let (vertices, indices) = {
-            Self::update_buffers::<T, C>(
-                &mut commands,
-                &mut self.vertices,
-                &mut self.indices,
-                &self.managed_textures,
-                &self.textures,
-                &self.default_texture,
-                &self.samplers,
-                &self.layout,
-                &mut self.bind_groups,
-                device,
-                queue,
-                paint,
-                custom_paint_resoucres,
-            )
-        };
 
         for command in &commands {
             match command {
@@ -406,25 +393,17 @@ impl YakuiWgpu {
     }
 
     fn update_buffers<'a, T: 'static, C: CallbackTrait<T> + 'static>(
+        &mut self,
         commands: &mut Vec<(DrawCommand<T>, Option<Rect>)>,
-        vertices: &'a mut Buffer,
-        indices: &'a mut Buffer,
-        managed_textures: &HashMap<ManagedTextureId, GpuManagedTexture>,
-        textures: &Arena<GpuTexture>,
-        default_texture: &GpuManagedTexture,
-        samplers: &Samplers,
-        layout: &wgpu::BindGroupLayout,
-        bind_groups: &mut Arena<wgpu::BindGroup>,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         paint: &mut PaintDom,
         custom_resources: &mut T,
-    ) -> (&'a wgpu::Buffer, &'a wgpu::Buffer) {
+    ) {
         profiling::scope!("update_buffers");
 
-        vertices.clear();
-        indices.clear();
-        bind_groups.clear();
+        self.vertices.clear();
+        self.indices.clear();
+        self.bind_groups.clear();
 
         let layers = paint.take_layers();
 
@@ -441,20 +420,20 @@ impl YakuiWgpu {
                             color: vertex.color,
                         });
 
-                        let base = vertices.len() as u32;
+                        let base = self.vertices.len() as u32;
                         let i = call.indices.iter().map(|&index| base + index as u32);
 
-                        let start = indices.len() as u32;
+                        let start = self.indices.len() as u32;
                         let end = start + i.len() as u32;
 
-                        vertices.extend(v);
-                        indices.extend(i);
+                        self.vertices.extend(v);
+                        self.indices.extend(i);
 
                         let (view, min_filter, mag_filter, mipmap_filter) = call
                             .texture
                             .and_then(|id| match id {
                                 TextureId::Managed(managed) => {
-                                    let texture = managed_textures.get(&managed)?;
+                                    let texture = self.managed_textures.get(&managed)?;
                                     Some((
                                         &texture.view,
                                         texture.min_filter,
@@ -464,7 +443,7 @@ impl YakuiWgpu {
                                 }
                                 TextureId::User(bits) => {
                                     let index = Index::from_bits(bits)?;
-                                    let texture = textures.get(index)?;
+                                    let texture = self.textures.get(index)?;
                                     Some((
                                         &texture.view,
                                         texture.min_filter,
@@ -474,17 +453,17 @@ impl YakuiWgpu {
                                 }
                             })
                             .unwrap_or((
-                                &default_texture.view,
-                                default_texture.min_filter,
-                                default_texture.mag_filter,
+                                &self.default_texture.view,
+                                self.default_texture.min_filter,
+                                self.default_texture.mag_filter,
                                 wgpu::FilterMode::Nearest,
                             ));
 
-                        let sampler = samplers.get(min_filter, mag_filter, mipmap_filter);
+                        let sampler = self.samplers.get(min_filter, mag_filter, mipmap_filter);
 
                         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                             label: Some("yakui Bind Group"),
-                            layout: &layout,
+                            layout: &self.layout,
                             entries: &[
                                 wgpu::BindGroupEntry {
                                     binding: 0,
@@ -500,7 +479,7 @@ impl YakuiWgpu {
                         (
                             DrawCommand::Yakui(YakuiDrawCommand {
                                 index_range: start..end,
-                                bind_group: bind_groups.insert(bind_group),
+                                bind_group: self.bind_groups.insert(bind_group),
                                 pipeline: call.pipeline,
                             }),
                             clip,
@@ -514,11 +493,6 @@ impl YakuiWgpu {
                     }
                 }),
         );
-
-        let vertices = vertices.upload(device, queue);
-        let indices = indices.upload(device, queue);
-
-        (vertices, indices)
     }
 
     fn update_textures(&mut self, device: &wgpu::Device, paint: &PaintDom, queue: &wgpu::Queue) {
