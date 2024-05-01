@@ -179,7 +179,7 @@ impl LayoutDom {
         }
 
         if self.current_clip_stack.is_none() {
-            self.new_clip_stack(dom);
+            self.enable_clipping(dom);
         }
 
         // There should always be a currently active clip stack.

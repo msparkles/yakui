@@ -85,9 +85,7 @@ impl PaintDom {
         if layout_node.clipping_enabled {
             self.push_clip(layout_node.rect, id);
             self.currently_clipped_by = Some(id);
-        }
-
-        if layout_node.clipped_by.is_some() {
+        } else if layout_node.clipped_by.is_some() {
             self.currently_clipped_by = layout_node.clipped_by;
             self.push_clip(
                 layout.get(layout_node.clipped_by.unwrap()).unwrap().rect,
