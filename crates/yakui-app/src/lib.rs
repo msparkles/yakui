@@ -12,15 +12,15 @@ pub struct Graphics {
     format: wgpu::TextureFormat,
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
-    size: PhysicalSize<u32>,
     sample_count: u32,
     multisampling: Multisampling,
 
     window: yakui_winit::YakuiWinit,
     pub renderer: yakui_wgpu::YakuiWgpu,
-
+    /*
     /// Tracks whether winit is still initializing
     is_init: bool,
+    */
 }
 
 impl Graphics {
@@ -99,14 +99,12 @@ impl Graphics {
             format,
             surface,
             surface_config,
-            size,
             sample_count,
             multisampling: Multisampling::new(),
 
             renderer,
             window,
-
-            is_init: true,
+            /*is_init: true, */
         }
     }
 
@@ -123,8 +121,11 @@ impl Graphics {
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 && new_size != self.size {
-            self.size = new_size;
+        if new_size.width > 0
+            && new_size.height > 0
+            && (new_size.width != self.surface_config.width
+                || new_size.height != self.surface_config.height)
+        {
             self.surface_config.width = new_size.width;
             self.surface_config.height = new_size.height;
             self.surface.configure(&self.device, &self.surface_config);
@@ -145,7 +146,7 @@ impl Graphics {
         let surface = self.multisampling.surface_info(
             &self.device,
             &view,
-            self.size,
+            &self.surface_config,
             self.format,
             self.sample_count,
         );
@@ -160,8 +161,11 @@ impl Graphics {
             let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: surface.color_attachment,
-                    resolve_target: surface.resolve_target,
+                    view: surface.color_attachments[0].as_ref().unwrap().view,
+                    resolve_target: surface.color_attachments[0]
+                        .as_ref()
+                        .unwrap()
+                        .resolve_target,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(bg),
                         store: wgpu::StoreOp::Store,
@@ -205,9 +209,9 @@ impl Graphics {
                 // and causing issues.
                 //
                 // https://github.com/rust-windowing/winit/issues/2094
-                if self.is_init {
+                /*if self.is_init {
                     return false;
-                }
+                }*/
 
                 self.resize(*size);
             }

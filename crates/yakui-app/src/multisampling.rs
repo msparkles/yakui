@@ -22,11 +22,15 @@ impl Multisampling {
         &'a mut self,
         device: &wgpu::Device,
         view: &'a wgpu::TextureView,
-        size: PhysicalSize<u32>,
+        config: &wgpu::SurfaceConfiguration,
         format: wgpu::TextureFormat,
         sample_count: u32,
     ) -> SurfaceInfo<'a> {
-        if size != self.size || format != self.format || sample_count != self.sample_count {
+        if config.width != self.size.width
+            || config.height != self.size.height
+            || format != self.format
+            || sample_count != self.sample_count
+        {
             self.ms_view = None;
         }
 
@@ -34,8 +38,14 @@ impl Multisampling {
             return SurfaceInfo {
                 format,
                 sample_count,
-                color_attachment: view,
-                resolve_target: None,
+                color_attachments: vec![Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
                 depth_format: None,
                 depth_attachment: None,
                 depth_load_op: None,
@@ -46,8 +56,8 @@ impl Multisampling {
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Multisampled Target"),
                 size: wgpu::Extent3d {
-                    width: size.width,
-                    height: size.height,
+                    width: config.width,
+                    height: config.height,
                     depth_or_array_layers: 1,
                 },
                 sample_count,
@@ -64,8 +74,14 @@ impl Multisampling {
         SurfaceInfo {
             format,
             sample_count,
-            color_attachment: ms_view,
-            resolve_target: Some(view),
+            color_attachments: vec![Some(wgpu::RenderPassColorAttachment {
+                view: ms_view,
+                resolve_target: Some(view),
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
             depth_format: None,
             depth_attachment: None,
             depth_load_op: None,

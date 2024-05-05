@@ -101,8 +101,14 @@ impl Graphics {
         let surface = SurfaceInfo {
             format: self.format,
             sample_count: 1,
-            color_attachment: &view,
-            resolve_target: None,
+            color_attachments: vec![Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
             depth_format: None,
             depth_attachment: None,
             depth_load_op: None,

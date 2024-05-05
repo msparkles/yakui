@@ -79,8 +79,7 @@ pub struct YakuiWgpu {
 pub struct SurfaceInfo<'a> {
     pub format: wgpu::TextureFormat,
     pub sample_count: u32,
-    pub color_attachment: &'a wgpu::TextureView,
-    pub resolve_target: Option<&'a wgpu::TextureView>,
+    pub color_attachments: Vec<Option<wgpu::RenderPassColorAttachment<'a>>>,
     pub depth_format: Option<wgpu::TextureFormat>,
     pub depth_attachment: Option<&'a wgpu::TextureView>,
     pub depth_load_op: Option<wgpu::LoadOp<f32>>,
@@ -220,14 +219,7 @@ impl YakuiWgpu {
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("yakui Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: surface.color_attachment,
-                    resolve_target: surface.resolve_target,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
+                color_attachments: &surface.color_attachments,
                 depth_stencil_attachment: surface.depth_attachment.zip(surface.depth_load_op).map(
                     |(view, load_op)| wgpu::RenderPassDepthStencilAttachment {
                         view,
@@ -332,10 +324,15 @@ impl YakuiWgpu {
                     if *clip != last_clip {
                         last_clip = *clip;
 
-                        let surface = paint.surface_size();
-                        render_pass.set_viewport(0.0, 0.0, surface.x, surface.y, 0.0, 1.0);
-
-                        let surface = surface.as_uvec2();
+                        let surface = paint.surface_size().as_uvec2();
+                        render_pass.set_viewport(
+                            0.0,
+                            0.0,
+                            surface.x as f32,
+                            surface.y as f32,
+                            0.0,
+                            1.0,
+                        );
 
                         match clip {
                             Some(rect) => {
