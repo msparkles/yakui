@@ -399,7 +399,7 @@ impl YakuiWgpu {
         custom_encoder.finish()
     }
 
-    fn update_buffers<'a, T: 'static, C: CallbackTrait<T> + 'static>(
+    fn update_buffers<T: 'static, C: CallbackTrait<T> + 'static>(
         &mut self,
         commands: &mut Vec<(DrawCommand<T>, Option<Rect>)>,
         device: &wgpu::Device,
