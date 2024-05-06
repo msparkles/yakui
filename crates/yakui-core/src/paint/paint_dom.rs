@@ -238,11 +238,17 @@ impl PaintDom {
         let vertices = mesh.vertices.into_iter().map(|mut vertex| {
             let mut pos = vertex.position * self.scale_factor;
             pos += self.unscaled_viewport.pos();
-            pos /= self.surface_size;
+
+            // Currently, we only round the vertices of geometry fed to the text
+            // pipeline because rounding all geometry causes hairline cracks in
+            // some geometry, like rounded rectangles.
+            //
+            // See: https://github.com/SecondHalfGames/yakui/issues/153
             if mesh.pipeline == Pipeline::Text {
-                pos = (pos * self.surface_size).round() / self.surface_size;
+                pos = pos.round();
             }
 
+            pos /= self.surface_size;
             vertex.position = pos;
             vertex
         });
