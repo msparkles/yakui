@@ -25,10 +25,10 @@ use self::samplers::Samplers;
 use self::texture::{GpuManagedTexture, GpuTexture};
 
 pub trait CallbackTrait<T> {
-    fn prepare(&self, _custom_resources: &mut T) {}
+    fn prepare(&mut self, _custom_resources: &mut T) {}
 
     fn finish_prepare(
-        &self,
+        &mut self,
         _device: &wgpu::Device,
         _queue: &wgpu::Queue,
         _encoder: &mut wgpu::CommandEncoder,
@@ -312,7 +312,7 @@ impl YakuiWgpu {
             },
         );
 
-        for command in &commands {
+        for command in &mut commands {
             match command {
                 (DrawCommand::Yakui(_), ..) => {}
                 (DrawCommand::Custom(command), ..) => command.finish_prepare(
@@ -493,7 +493,7 @@ impl YakuiWgpu {
                         )
                     }
                     (PaintCall::Custom(call), clip) => {
-                        let command = call.callback.downcast::<C>().unwrap();
+                        let mut command = call.callback.downcast::<C>().unwrap();
                         command.prepare(custom_resources);
 
                         (DrawCommand::Custom(command), clip)
