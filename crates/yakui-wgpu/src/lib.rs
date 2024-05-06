@@ -329,12 +329,13 @@ impl<T> YakuiWgpu<T> {
         let mut last_clip = None;
 
         for command in &self.commands {
+            let surface = paint.surface_size().as_uvec2();
+
             match command {
-                (DrawCommand::Yakui(..), clip) | (DrawCommand::Custom(..), clip) => {
+                (DrawCommand::Yakui(..), clip) => {
                     if *clip != last_clip {
                         last_clip = *clip;
 
-                        let surface = paint.surface_size().as_uvec2();
                         render_pass.set_viewport(
                             0.0,
                             0.0,
@@ -355,7 +356,7 @@ impl<T> YakuiWgpu<T> {
                                     max.y.saturating_sub(pos.y),
                                 );
 
-                                // If the scissor rect isn't valid, we can skip this
+                                // If the rect isn't valid, we can skip this
                                 // entire draw call.
                                 if pos.x > surface.x
                                     || pos.y > surface.y
@@ -371,6 +372,40 @@ impl<T> YakuiWgpu<T> {
                                 render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
                             }
                         }
+                    }
+                }
+                (DrawCommand::Custom(..), clip) => {
+                    if *clip != last_clip {
+                        last_clip = *clip;
+
+                        if let Some(rect) = clip {
+                            let pos = rect.pos().as_uvec2();
+                            let size = rect.size().as_uvec2();
+
+                            let max = (pos + size).min(surface);
+                            let size = UVec2::new(
+                                max.x.saturating_sub(pos.x),
+                                max.y.saturating_sub(pos.y),
+                            );
+
+                            // If the rect isn't valid, we can skip this
+                            // entire draw call.
+                            if pos.x > surface.x || pos.y > surface.y || size.x == 0 || size.y == 0
+                            {
+                                continue;
+                            }
+
+                            render_pass.set_viewport(
+                                pos.x as f32,
+                                pos.y as f32,
+                                size.x as f32,
+                                size.y as f32,
+                                0.0,
+                                1.0,
+                            );
+                        }
+
+                        render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
                     }
                 }
             }
