@@ -37,7 +37,7 @@ pub trait CallbackTrait<T> {
     }
 
     fn paint<'a>(
-        &self,
+        &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -47,7 +47,7 @@ pub trait CallbackTrait<T> {
 
 impl CallbackTrait<()> for () {
     fn paint<'a>(
-        &self,
+        &'a self,
         _render_pass: &mut wgpu::RenderPass<'a>,
         _device: &wgpu::Device,
         _queue: &wgpu::Queue,
@@ -62,7 +62,7 @@ pub fn cast<T: 'static>(callback: impl CallbackTrait<T> + 'static) -> CustomPain
     }
 }
 
-pub struct YakuiWgpu {
+pub struct YakuiWgpu<T> {
     main_pipeline: PipelineCache,
     text_pipeline: PipelineCache,
     layout: wgpu::BindGroupLayout,
@@ -71,6 +71,8 @@ pub struct YakuiWgpu {
     textures: Arena<GpuTexture>,
     managed_textures: HashMap<ManagedTextureId, GpuManagedTexture>,
     bind_groups: Arena<wgpu::BindGroup>,
+
+    commands: Vec<(DrawCommand<T>, Option<Rect>)>,
 
     vertices: Buffer,
     indices: Buffer,
@@ -106,7 +108,7 @@ impl Vertex {
     };
 }
 
-impl YakuiWgpu {
+impl<T> YakuiWgpu<T> {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("yakui Bind Group Layout"),
@@ -162,6 +164,8 @@ impl YakuiWgpu {
             managed_textures: HashMap::new(),
             bind_groups: Arena::new(),
 
+            commands: Vec::new(),
+
             vertices: Buffer::new(wgpu::BufferUsages::VERTEX),
             indices: Buffer::new(wgpu::BufferUsages::INDEX),
         }
@@ -205,7 +209,7 @@ impl YakuiWgpu {
     }
 
     #[must_use = "YakuiWgpu::paint returns a command buffer which MUST be submitted to wgpu."]
-    pub fn paint<T: 'static, C: CallbackTrait<T> + 'static>(
+    pub fn paint<C: CallbackTrait<T> + 'static>(
         &mut self,
         state: &mut yakui_core::Yakui,
         device: &wgpu::Device,
@@ -234,7 +238,7 @@ impl YakuiWgpu {
                 ..Default::default()
             });
 
-            self.paint_with::<T, C>(
+            self.paint_with::<C>(
                 state,
                 device,
                 queue,
@@ -247,7 +251,7 @@ impl YakuiWgpu {
         [custom_commands, encoder.finish()]
     }
 
-    pub fn paint_with<'a, T: 'static, C: CallbackTrait<T> + 'static>(
+    pub fn paint_with<'a, C: CallbackTrait<T> + 'static>(
         &'a mut self,
         state: &mut yakui_core::Yakui,
         device: &wgpu::Device,
@@ -275,9 +279,7 @@ impl YakuiWgpu {
             return custom_encoder.finish();
         }
 
-        let mut commands = Vec::new();
-
-        self.update_buffers::<T, C>(&mut commands, device, paint, custom_paint_resoucres);
+        self.update_buffers::<C>(device, paint, custom_paint_resoucres);
 
         let vertices = self.vertices.upload(device, queue);
         let indices = self.indices.upload(device, queue);
@@ -312,7 +314,7 @@ impl YakuiWgpu {
             },
         );
 
-        for command in &mut commands {
+        for command in &mut self.commands {
             match command {
                 (DrawCommand::Yakui(_), ..) => {}
                 (DrawCommand::Custom(command), ..) => command.finish_prepare(
@@ -326,7 +328,7 @@ impl YakuiWgpu {
 
         let mut last_clip = None;
 
-        for command in &commands {
+        for command in &self.commands {
             match command {
                 (DrawCommand::Yakui(..), clip) | (DrawCommand::Custom(..), clip) => {
                     if *clip != last_clip {
@@ -399,9 +401,8 @@ impl YakuiWgpu {
         custom_encoder.finish()
     }
 
-    fn update_buffers<T: 'static, C: CallbackTrait<T> + 'static>(
+    fn update_buffers<C: CallbackTrait<T> + 'static>(
         &mut self,
-        commands: &mut Vec<(DrawCommand<T>, Option<Rect>)>,
         device: &wgpu::Device,
         paint: &mut PaintDom,
         custom_resources: &mut T,
@@ -414,7 +415,8 @@ impl YakuiWgpu {
 
         let layers = paint.take_layers();
 
-        commands.extend(
+        self.commands.clear();
+        self.commands.extend(
             layers
                 .into_inner()
                 .into_iter()

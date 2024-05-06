@@ -44,7 +44,7 @@ impl Graphics {
     pub fn paint(
         &self,
         yak: &mut yakui_core::Yakui,
-        yak_renderer: &mut yakui_wgpu::YakuiWgpu,
+        yak_renderer: &mut yakui_wgpu::YakuiWgpu<()>,
     ) -> RgbaImage {
         let viewport = yak.layout_dom().unscaled_viewport();
         let size = wgpu::Extent3d {
@@ -114,7 +114,7 @@ impl Graphics {
             depth_load_op: None,
         };
         let [custom_paint, paint_yak] =
-            yak_renderer.paint::<(), ()>(yak, &self.device, &self.queue, surface, &mut ());
+            yak_renderer.paint::<()>(yak, &self.device, &self.queue, surface, &mut ());
 
         let mut encoder = self
             .device

@@ -16,7 +16,7 @@ pub struct Graphics {
     multisampling: Multisampling,
 
     window: yakui_winit::YakuiWinit,
-    pub renderer: yakui_wgpu::YakuiWgpu,
+    pub renderer: yakui_wgpu::YakuiWgpu<()>,
     /*
     /// Tracks whether winit is still initializing
     is_init: bool,
@@ -108,7 +108,7 @@ impl Graphics {
         }
     }
 
-    pub fn renderer_mut(&mut self) -> &mut yakui_wgpu::YakuiWgpu {
+    pub fn renderer_mut(&mut self) -> &mut yakui_wgpu::YakuiWgpu<()> {
         &mut self.renderer
     }
 
@@ -179,7 +179,7 @@ impl Graphics {
 
         let [custom_paint, paint_yak] =
             self.renderer
-                .paint::<(), ()>(yak, &self.device, &self.queue, surface, &mut ());
+                .paint::<()>(yak, &self.device, &self.queue, surface, &mut ());
 
         self.queue.submit([clear, custom_paint, paint_yak]);
         output.present();
