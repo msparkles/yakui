@@ -31,6 +31,7 @@ pub trait CallbackTrait<T> {
         &self,
         _device: &wgpu::Device,
         _queue: &wgpu::Queue,
+        _encoder: &mut wgpu::CommandEncoder,
         _custom_resources: &mut T,
     ) {
     }
@@ -211,12 +212,12 @@ impl YakuiWgpu {
         queue: &wgpu::Queue,
         surface: SurfaceInfo,
         custom_paint_resoucres: &mut T,
-    ) -> wgpu::CommandBuffer {
+    ) -> [wgpu::CommandBuffer; 2] {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("yakui Encoder"),
         });
 
-        {
+        let custom_commands = {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("yakui Render Pass"),
                 color_attachments: &surface.color_attachments,
@@ -240,10 +241,10 @@ impl YakuiWgpu {
                 &mut render_pass,
                 surface,
                 custom_paint_resoucres,
-            );
-        }
+            )
+        };
 
-        encoder.finish()
+        [custom_commands, encoder.finish()]
     }
 
     pub fn paint_with<'a, T: 'static, C: CallbackTrait<T> + 'static>(
@@ -254,8 +255,12 @@ impl YakuiWgpu {
         render_pass: &mut wgpu::RenderPass<'a>,
         surface: SurfaceInfo,
         custom_paint_resoucres: &'a mut T,
-    ) {
+    ) -> wgpu::CommandBuffer {
         profiling::scope!("yakui-wgpu paint_with_encoder");
+
+        let mut custom_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("yakui Callback Encoder"),
+        });
 
         let paint = state.paint();
 
@@ -263,11 +268,11 @@ impl YakuiWgpu {
 
         let layers = paint.layers();
         if layers.iter().all(|layer| layer.calls.is_empty()) {
-            return;
+            return custom_encoder.finish();
         }
 
         if paint.surface_size() == Vec2::ZERO {
-            return;
+            return custom_encoder.finish();
         }
 
         let mut commands = Vec::new();
@@ -310,9 +315,12 @@ impl YakuiWgpu {
         for command in &commands {
             match command {
                 (DrawCommand::Yakui(_), ..) => {}
-                (DrawCommand::Custom(command), ..) => {
-                    command.finish_prepare(device, queue, custom_paint_resoucres);
-                }
+                (DrawCommand::Custom(command), ..) => command.finish_prepare(
+                    device,
+                    queue,
+                    &mut custom_encoder,
+                    custom_paint_resoucres,
+                ),
             }
         }
 
@@ -387,6 +395,8 @@ impl YakuiWgpu {
                 }
             }
         }
+
+        custom_encoder.finish()
     }
 
     fn update_buffers<'a, T: 'static, C: CallbackTrait<T> + 'static>(

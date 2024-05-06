@@ -113,7 +113,7 @@ impl Graphics {
             depth_attachment: None,
             depth_load_op: None,
         };
-        let paint_yak =
+        let [custom_paint, paint_yak] =
             yak_renderer.paint::<(), ()>(yak, &self.device, &self.queue, surface, &mut ());
 
         let mut encoder = self
@@ -142,7 +142,7 @@ impl Graphics {
 
         let copy = encoder.finish();
 
-        self.queue.submit([clear, paint_yak, copy]);
+        self.queue.submit([clear, custom_paint, paint_yak, copy]);
         let buffer_slice = buffer.slice(..);
         buffer_slice.map_async(wgpu::MapMode::Read, |res| {
             res.unwrap();
