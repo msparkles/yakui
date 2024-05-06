@@ -193,7 +193,7 @@ impl LayoutDom {
         // If this node enabled clipping, the next node under that is the node
         // that clips this one.
         let clipped_by = if clipping_enabled {
-            clip_stack.iter().nth_back(2).copied()
+            clip_stack.iter().nth_back(1).copied()
         } else {
             clip_stack.last().copied()
         };
