@@ -56,12 +56,6 @@ impl CallbackTrait<()> for () {
     }
 }
 
-pub fn cast<T: 'static>(callback: impl CallbackTrait<T> + 'static) -> CustomPaintCall {
-    CustomPaintCall {
-        callback: Box::new(callback),
-    }
-}
-
 pub struct YakuiWgpu<T> {
     main_pipeline: PipelineCache,
     text_pipeline: PipelineCache,
