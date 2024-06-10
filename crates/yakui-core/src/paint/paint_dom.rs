@@ -27,6 +27,7 @@ pub struct PaintDom {
     layers: PaintLayers,
     clip_stack: Arena<Rect>,
     currently_clipped_by: Option<WidgetId>,
+    previous_clip: Option<Rect>,
 }
 
 impl PaintDom {
@@ -41,6 +42,7 @@ impl PaintDom {
             layers: PaintLayers::new(),
             clip_stack: Arena::new(),
             currently_clipped_by: None,
+            previous_clip: None,
         }
     }
 
@@ -49,6 +51,7 @@ impl PaintDom {
         self.texture_edits.clear();
         self.clip_stack.clear();
         self.currently_clipped_by = None;
+        self.previous_clip = None;
     }
 
     /// Returns the size of the surface that is being painted onto.
@@ -91,23 +94,31 @@ impl PaintDom {
                 layout.get(layout_node.clipped_by.unwrap()).unwrap().rect,
                 layout_node.clipped_by.unwrap(),
             );
+        };
+
+        let mut draw = true;
+        if let Some((prev, clip)) = self.previous_clip.zip(self.get_current_clip()) {
+            draw = prev.intersects(&clip);
         }
 
         dom.enter(id);
 
-        let context = PaintContext {
-            dom,
-            layout,
-            paint: self,
-        };
-        let node = dom.get(id).unwrap();
-        node.widget.paint(context);
+        if draw {
+            let context = PaintContext {
+                dom,
+                layout,
+                paint: self,
+            };
+            let node = dom.get(id).unwrap();
+            node.widget.paint(context);
+        }
 
         dom.exit(id);
 
         if layout_node.clipping_enabled {
             self.pop_clip(id);
         }
+
         if layout_node.new_layer {
             self.layers.pop();
         }
@@ -269,6 +280,8 @@ impl PaintDom {
         }
 
         self.clip_stack.insert_at(id.index(), unscaled);
+
+        self.previous_clip = previous;
     }
 
     /// Pop the most recent clip region, restoring the previous clipping rect.
