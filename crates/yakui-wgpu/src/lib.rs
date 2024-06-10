@@ -15,9 +15,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::UVec2;
 use thunderdome::{Arena, Index};
 use yakui_core::geometry::{Rect, Vec2, Vec4};
-use yakui_core::paint::{
-    CustomPaintCall, PaintCall, PaintDom, Pipeline, Texture, TextureChange, TextureFormat,
-};
+use yakui_core::paint::{PaintCall, PaintDom, Pipeline, Texture, TextureChange, TextureFormat};
 use yakui_core::{ManagedTextureId, TextureId};
 
 use self::pipeline_cache::PipelineCache;
@@ -39,9 +37,9 @@ pub trait CallbackTrait<T> {
     fn paint<'a>(
         &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        custom_resources: &'a T,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        _custom_resources: &'a T,
     );
 }
 
@@ -308,73 +306,55 @@ impl<T> YakuiWgpu<T> {
             },
         );
 
+        let surface = paint.surface_size().as_uvec2();
+
         for command in &mut self.commands {
-            match command {
-                (DrawCommand::Yakui(_), ..) => {}
-                (DrawCommand::Custom(command), ..) => command.finish_prepare(
-                    device,
-                    queue,
-                    &mut custom_encoder,
-                    custom_paint_resoucres,
-                ),
+            if let (DrawCommand::Custom(command), clip) = command {
+                if let Some(clip) = clip {
+                    let pos = clip.pos().as_uvec2();
+                    let size = clip.size().as_uvec2();
+
+                    let max = (pos + size).min(surface);
+                    let size = UVec2::new(max.x.saturating_sub(pos.x), max.y.saturating_sub(pos.y));
+
+                    // If the rect isn't valid, we can skip this
+                    // entire draw call.
+                    if pos.x > surface.x || pos.y > surface.y || size.x == 0 || size.y == 0 {
+                        continue;
+                    }
+
+                    render_pass.set_viewport(
+                        pos.x as f32,
+                        pos.y as f32,
+                        size.x as f32,
+                        size.y as f32,
+                        0.0,
+                        1.0,
+                    );
+                }
+
+                render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
+
+                command.finish_prepare(device, queue, &mut custom_encoder, custom_paint_resoucres);
             }
         }
 
-        let mut last_clip = None;
-
         for command in &self.commands {
-            let surface = paint.surface_size().as_uvec2();
-
             match command {
-                (DrawCommand::Yakui(..), clip) => {
-                    if *clip != last_clip {
-                        last_clip = *clip;
+                (DrawCommand::Yakui(command), clip) => {
+                    render_pass.set_viewport(
+                        0.0,
+                        0.0,
+                        surface.x as f32,
+                        surface.y as f32,
+                        0.0,
+                        1.0,
+                    );
 
-                        render_pass.set_viewport(
-                            0.0,
-                            0.0,
-                            surface.x as f32,
-                            surface.y as f32,
-                            0.0,
-                            1.0,
-                        );
-
-                        match clip {
-                            Some(rect) => {
-                                let pos = rect.pos().as_uvec2();
-                                let size = rect.size().as_uvec2();
-
-                                let max = (pos + size).min(surface);
-                                let size = UVec2::new(
-                                    max.x.saturating_sub(pos.x),
-                                    max.y.saturating_sub(pos.y),
-                                );
-
-                                // If the rect isn't valid, we can skip this
-                                // entire draw call.
-                                if pos.x > surface.x
-                                    || pos.y > surface.y
-                                    || size.x == 0
-                                    || size.y == 0
-                                {
-                                    continue;
-                                }
-
-                                render_pass.set_scissor_rect(pos.x, pos.y, size.x, size.y);
-                            }
-                            None => {
-                                render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
-                            }
-                        }
-                    }
-                }
-                (DrawCommand::Custom(..), clip) => {
-                    if *clip != last_clip {
-                        last_clip = *clip;
-
-                        if let Some(rect) = clip {
-                            let pos = rect.pos().as_uvec2();
-                            let size = rect.size().as_uvec2();
+                    match clip {
+                        Some(clip) => {
+                            let pos = clip.pos().as_uvec2();
+                            let size = clip.size().as_uvec2();
 
                             let max = (pos + size).min(surface);
                             let size = UVec2::new(
@@ -389,23 +369,13 @@ impl<T> YakuiWgpu<T> {
                                 continue;
                             }
 
-                            render_pass.set_viewport(
-                                pos.x as f32,
-                                pos.y as f32,
-                                size.x as f32,
-                                size.y as f32,
-                                0.0,
-                                1.0,
-                            );
+                            render_pass.set_scissor_rect(pos.x, pos.y, size.x, size.y);
                         }
-
-                        render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
+                        None => {
+                            render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
+                        }
                     }
-                }
-            }
 
-            match command {
-                (DrawCommand::Yakui(command), ..) => {
                     match command.pipeline {
                         Pipeline::Main => render_pass.set_pipeline(main_pipeline),
                         Pipeline::Text => render_pass.set_pipeline(text_pipeline),
@@ -421,7 +391,33 @@ impl<T> YakuiWgpu<T> {
                     );
                     render_pass.draw_indexed(command.index_range.clone(), 0, 0..1);
                 }
-                (DrawCommand::Custom(command), ..) => {
+                (DrawCommand::Custom(command), clip) => {
+                    if let Some(clip) = clip {
+                        let pos = clip.pos().as_uvec2();
+                        let size = clip.size().as_uvec2();
+
+                        let max = (pos + size).min(surface);
+                        let size =
+                            UVec2::new(max.x.saturating_sub(pos.x), max.y.saturating_sub(pos.y));
+
+                        // If the rect isn't valid, we can skip this
+                        // entire draw call.
+                        if pos.x > surface.x || pos.y > surface.y || size.x == 0 || size.y == 0 {
+                            continue;
+                        }
+
+                        render_pass.set_viewport(
+                            pos.x as f32,
+                            pos.y as f32,
+                            size.x as f32,
+                            size.y as f32,
+                            0.0,
+                            1.0,
+                        );
+                    }
+
+                    render_pass.set_scissor_rect(0, 0, surface.x, surface.y);
+
                     command.paint(render_pass, device, queue, custom_paint_resoucres);
                 }
             }
