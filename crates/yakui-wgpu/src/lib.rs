@@ -592,6 +592,7 @@ fn make_main_pipeline(
             module: &main_shader,
             entry_point: "vs_main",
             buffers: &[Vertex::DESCRIPTOR],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
         },
         fragment: Some(wgpu::FragmentState {
             module: &main_shader,
@@ -601,6 +602,7 @@ fn make_main_pipeline(
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
@@ -645,6 +647,7 @@ fn make_text_pipeline(
             module: &text_shader,
             entry_point: "vs_main",
             buffers: &[Vertex::DESCRIPTOR],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
         },
         fragment: Some(wgpu::FragmentState {
             module: &text_shader,
@@ -654,6 +657,7 @@ fn make_text_pipeline(
                 blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
