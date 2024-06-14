@@ -15,7 +15,7 @@ yakui-winit = { path = "../yakui-winit" }
 
 anyhow = "1.0.58"
 env_logger = "0.10.0"
-image = { version = "0.24.2", default-features = false, features = ["png"] }
+image = { version = "0.25.1", default-features = false, features = ["png"] }
 log = "0.4.17"
 pollster = "0.3.0"
 profiling = "1.0.6"
