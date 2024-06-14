@@ -14,7 +14,7 @@ yakui-wgpu = { path = "../yakui-wgpu" }
 yakui-winit = { path = "../yakui-winit" }
 
 anyhow = "1.0.58"
-env_logger = "0.10.0"
+env_logger = "0.11.3"
 image = { version = "0.25.1", default-features = false, features = ["png"] }
 log = "0.4.17"
 pollster = "0.3.0"
