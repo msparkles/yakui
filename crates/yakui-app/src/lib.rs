@@ -16,7 +16,7 @@ pub struct Graphics {
     multisampling: Multisampling,
 
     window: yakui_winit::YakuiWinit,
-    pub renderer: yakui_wgpu::YakuiWgpu,
+    pub renderer: yakui_wgpu::YakuiWgpu<()>,
     /*
     /// Tracks whether winit is still initializing
     is_init: bool,
