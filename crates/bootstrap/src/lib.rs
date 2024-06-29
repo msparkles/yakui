@@ -97,6 +97,7 @@ impl<T: ExampleBody> ApplicationHandler for App<T> {
             wgpu::FilterMode::Nearest,
             wgpu::FilterMode::Nearest,
             wgpu::FilterMode::Nearest,
+            wgpu::AddressMode::ClampToEdge,
         );
 
         // Add a custom font for some of the examples.
@@ -242,6 +243,16 @@ fn run(body: impl ExampleBody) {
     // Create our yakui state. This is where our UI will be built, laid out, and
     // calculations for painting will happen.
     let yak = yakui::Yakui::new();
+
+    // Add a custom font for some of the examples.
+    let fonts = yak.dom().get_global_or_init(Fonts::default);
+    let font = Font::from_bytes(
+        include_bytes!("../assets/Hack-Regular.ttf").as_slice(),
+        FontSettings::default(),
+    )
+    .unwrap();
+
+    fonts.add(font, Some("monospace"));
 
     // Set up some default state that we'll modify later.
     let mut app = App {
