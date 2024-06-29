@@ -234,16 +234,6 @@ fn run(body: impl ExampleBody) {
 
     fonts.add(font, Some("monospace"));
 
-    // Add a custom font for some of the examples.
-    let fonts = yak.dom().get_global_or_init(Fonts::default);
-    let font = Font::from_bytes(
-        include_bytes!("../assets/Hack-Regular.ttf").as_slice(),
-        FontSettings::default(),
-    )
-    .unwrap();
-
-    fonts.add(font, Some("monospace"));
-
     // Set up some default state that we'll modify later.
     let mut app = App {
         yak,
