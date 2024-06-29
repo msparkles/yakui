@@ -16,11 +16,11 @@ pub struct Graphics {
     multisampling: Multisampling,
 
     window: yakui_winit::YakuiWinit,
-    pub renderer: yakui_wgpu::YakuiWgpu<()>,
+    pub renderer: yakui_wgpu::YakuiWgpu,
     /*
     /// Tracks whether winit is still initializing
     is_init: bool,
-    */
+     */
 }
 
 impl Graphics {
@@ -104,7 +104,7 @@ impl Graphics {
 
             renderer,
             window,
-            /*is_init: true, */
+            /*is_init: true,*/
         }
     }
 

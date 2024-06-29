@@ -3,9 +3,11 @@ mod custom_texture;
 use std::fmt::Write;
 use std::time::Instant;
 
-use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::{
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+};
 
 use winit::window::{Window, WindowAttributes, WindowId};
 use yakui::font::{Font, FontSettings, Fonts};
@@ -35,16 +37,16 @@ pub struct ExampleState {
     /// `TextureId` represents either a managed texture or a texture owned by
     /// the renderer. This image is generated in `custom_texture.rs` and
     /// uploaded with wgpu directly.
-    pub custom: TextureId,
+    pub custom: Option<TextureId>,
 }
 
 struct App<T: ExampleBody> {
+    state: ExampleState,
     yak: Yakui,
 
     attributes: WindowAttributes,
     start: Instant,
 
-    state: Option<ExampleState>,
     window: Option<Window>,
     app: Option<Graphics>,
 
@@ -82,16 +84,6 @@ impl<T: ExampleBody> ApplicationHandler for App<T> {
             app.window_mut().set_automatic_viewport(false);
         }
 
-        // Preload some textures for the examples to use.
-        let monkey = self
-            .yak
-            .add_texture(load_texture(MONKEY_PNG, TextureFilter::Linear));
-        let monkey_blurred = self
-            .yak
-            .add_texture(load_texture(MONKEY_BLURRED_PNG, TextureFilter::Linear));
-        let brown_inlay = self
-            .yak
-            .add_texture(load_texture(BROWN_INLAY_PNG, TextureFilter::Nearest));
         let custom = app.renderer.add_texture(
             custom_texture::generate(&app.device, &app.queue),
             wgpu::FilterMode::Nearest,
@@ -99,24 +91,7 @@ impl<T: ExampleBody> ApplicationHandler for App<T> {
             wgpu::FilterMode::Nearest,
             wgpu::AddressMode::ClampToEdge,
         );
-
-        // Add a custom font for some of the examples.
-        let fonts = self.yak.dom().get_global_or_init(Fonts::default);
-        let font = Font::from_bytes(
-            include_bytes!("../assets/Hack-Regular.ttf").as_slice(),
-            FontSettings::default(),
-        )
-        .unwrap();
-
-        fonts.add(font, Some("monospace"));
-
-        self.state = Some(ExampleState {
-            time: 0.0,
-            monkey,
-            monkey_blurred,
-            brown_inlay,
-            custom,
-        });
+        self.state.custom = Some(custom);
 
         self.app = Some(app);
         self.window = Some(window);
@@ -140,7 +115,7 @@ impl<T: ExampleBody> ApplicationHandler for App<T> {
         // Handle window event.
         match event {
             WindowEvent::RedrawRequested => {
-                self.state.as_mut().unwrap().time = (Instant::now() - self.start).as_secs_f32();
+                self.state.time = (Instant::now() - self.start).as_secs_f32();
 
                 {
                     profiling::scope!("Build UI");
@@ -153,7 +128,7 @@ impl<T: ExampleBody> ApplicationHandler for App<T> {
 
                     // Call out to the body of the program, passing in a bit of
                     // shared state that all the examples can use.
-                    self.body.run(self.state.as_mut().unwrap());
+                    self.body.run(&mut self.state);
 
                     // Finish building the UI and compute this frame's layout.
                     self.yak.finish();
@@ -242,7 +217,22 @@ fn run(body: impl ExampleBody) {
 
     // Create our yakui state. This is where our UI will be built, laid out, and
     // calculations for painting will happen.
-    let yak = yakui::Yakui::new();
+    let mut yak = yakui::Yakui::new();
+
+    // Preload some textures for the examples to use.
+    let monkey = yak.add_texture(load_texture(MONKEY_PNG, TextureFilter::Linear));
+    let monkey_blurred = yak.add_texture(load_texture(MONKEY_BLURRED_PNG, TextureFilter::Linear));
+    let brown_inlay = yak.add_texture(load_texture(BROWN_INLAY_PNG, TextureFilter::Nearest));
+
+    // Add a custom font for some of the examples.
+    let fonts = yak.dom().get_global_or_init(Fonts::default);
+    let font = Font::from_bytes(
+        include_bytes!("../assets/Hack-Regular.ttf").as_slice(),
+        FontSettings::default(),
+    )
+    .unwrap();
+
+    fonts.add(font, Some("monospace"));
 
     // Add a custom font for some of the examples.
     let fonts = yak.dom().get_global_or_init(Fonts::default);
@@ -259,7 +249,13 @@ fn run(body: impl ExampleBody) {
         yak,
         attributes: window_attribute,
         start: Instant::now(),
-        state: None,
+        state: ExampleState {
+            time: 0.0,
+            monkey,
+            monkey_blurred,
+            brown_inlay,
+            custom: None,
+        },
         window: None,
         app: None,
         body,
