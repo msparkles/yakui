@@ -17,10 +17,8 @@ pub struct Graphics {
 
     window: yakui_winit::YakuiWinit,
     pub renderer: yakui_wgpu::YakuiWgpu<()>,
-    /*
     /// Tracks whether winit is still initializing
-    is_init: bool,
-     */
+    pub is_init: bool,
 }
 
 impl Graphics {
@@ -104,7 +102,7 @@ impl Graphics {
 
             renderer,
             window,
-            /*is_init: true,*/
+            is_init: true,
         }
     }
 
@@ -185,7 +183,7 @@ impl Graphics {
         output.present();
     }
 
-    pub fn handle_event(
+    pub fn handle_window_event(
         &mut self,
         yak: &mut yakui::Yakui,
         event: &WindowEvent,
@@ -194,7 +192,7 @@ impl Graphics {
         // yakui_winit will return whether it handled an event. This means that
         // yakui believes it should handle that event exclusively, like if a
         // button in the UI was clicked.
-        if self.window.handle_event(yak, event) {
+        if self.window.handle_window_event(yak, event) {
             return true;
         }
 
@@ -209,9 +207,9 @@ impl Graphics {
                 // and causing issues.
                 //
                 // https://github.com/rust-windowing/winit/issues/2094
-                /*if self.is_init {
+                if self.is_init {
                     return false;
-                }*/
+                }
 
                 self.resize(*size);
             }
