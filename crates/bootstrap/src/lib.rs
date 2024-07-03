@@ -237,11 +237,12 @@ fn run(body: impl ExampleBody) {
     let brown_inlay = yak.add_texture(load_texture(BROWN_INLAY_PNG, TextureFilter::Nearest));
 
     // Add a custom font for some of the examples.
-    let fonts = yak.dom().get_global_or_init(Fonts::default);
+    let mut fonts = yak.dom().get_global_or_init(Fonts::default);
 
     static HACK_REGULAR: &[u8] = include_bytes!("../assets/Hack-Regular.ttf");
 
     fonts.load_font_source(fontdb::Source::Binary(Arc::from(&HACK_REGULAR)));
+    fonts.set_monospace_family("Hack");
 
     // Set up some default state that we'll modify later.
     let mut app = App {
