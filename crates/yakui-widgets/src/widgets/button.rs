@@ -40,7 +40,6 @@ pub struct Button {
 
 /// Contains styles that can vary based on the state of the button.
 #[derive(Debug, Clone)]
-#[non_exhaustive]
 pub struct DynamicButtonStyle {
     pub text: TextStyle,
     pub fill: Color,
