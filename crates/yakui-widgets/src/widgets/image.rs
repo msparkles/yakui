@@ -30,6 +30,7 @@ impl Image {
         }
     }
 
+    #[track_caller]
     pub fn show(self) -> Response<ImageResponse> {
         widget::<ImageWidget>(self)
     }

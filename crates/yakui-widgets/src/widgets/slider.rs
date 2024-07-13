@@ -35,6 +35,7 @@ impl Slider {
         }
     }
 
+    #[track_caller]
     pub fn show(self) -> Response<SliderResponse> {
         util::widget::<SliderWidget>(self)
     }

@@ -65,6 +65,7 @@ impl TextBox {
         }
     }
 
+    #[track_caller]
     pub fn show_with_text(
         initial_text: &str,
         updated_text: Option<&str>,
@@ -80,6 +81,7 @@ impl TextBox {
         }
     }
 
+    #[track_caller]
     pub fn show(self) -> Response<TextBoxResponse> {
         widget::<TextBoxWidget>(self)
     }
@@ -129,6 +131,10 @@ impl Widget for TextBoxWidget {
             text_changed: Cell::default(),
             scale_factor: Cell::default(),
         }
+    }
+
+    fn reset_state(&mut self) {
+        self.cosmic_editor.take();
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {

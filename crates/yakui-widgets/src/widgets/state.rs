@@ -21,6 +21,7 @@ impl<T: 'static> State<T> {
         }
     }
 
+    #[track_caller]
     pub fn show(self) -> Response<StateResponse<T>> {
         util::widget::<StateWidget<T>>(self)
     }
@@ -74,6 +75,10 @@ impl<T: 'static> Widget for StateWidget<T> {
 
     fn new() -> Self {
         Self { value: None }
+    }
+
+    fn reset_state(&mut self) {
+        self.value.take();
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
