@@ -9,6 +9,7 @@ use std::any::{type_name, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::VecDeque;
 use std::mem::replace;
+use std::panic::Location;
 use std::rc::Rc;
 
 use anymap::AnyMap;
@@ -51,6 +52,8 @@ pub struct DomNode {
     /// Used when building the tree. The index of the next child if a new child
     /// starts being built.
     next_child: usize,
+
+    call_location: &'static Location<'static>,
 }
 
 impl Dom {
@@ -186,6 +189,7 @@ impl Dom {
 
     /// Convenience method for calling [`Dom::begin_widget`] immediately
     /// followed by [`Dom::end_widget`].
+    #[track_caller]
     pub fn do_widget<T: Widget>(&self, props: T::Props<'_>) -> Response<T::Response> {
         let response = self.begin_widget::<T>(props);
         self.end_widget::<T>(response.id);
@@ -195,10 +199,11 @@ impl Dom {
     /// Begin building a widget with the given type and props.
     ///
     /// After calling this method, children can be added to this widget.
+    #[track_caller]
     pub fn begin_widget<T: Widget>(&self, props: T::Props<'_>) -> Response<T::Response> {
         log::trace!("begin_widget::<{}>({props:#?}", type_name::<T>());
 
-        let (id, mut widget) = {
+        let (id, mut widget, call_location) = {
             let mut nodes = self.inner.nodes.borrow_mut();
             let id = next_widget(&mut nodes, self.current());
             self.inner.stack.borrow_mut().push(id);
@@ -210,7 +215,7 @@ impl Dom {
             let widget = replace(&mut node.widget, Box::new(DummyWidget));
 
             node.next_child = 0;
-            (id, widget)
+            (id, widget, node.call_location)
         };
 
         // Potentially recreate the widget, then update it.
@@ -220,6 +225,10 @@ impl Dom {
             }
 
             let widget = widget.downcast_mut::<T>().unwrap();
+            if call_location != Location::caller() {
+                widget.reset_state();
+            }
+
             widget.update(props)
         };
 
@@ -228,6 +237,7 @@ impl Dom {
             let mut nodes = self.inner.nodes.borrow_mut();
             let node = nodes.get_mut(id.index()).unwrap();
             node.widget = widget;
+            node.call_location = Location::caller();
         }
 
         Response::new(id, response)
@@ -261,6 +271,7 @@ impl DomInner {
             parent: None,
             children: Vec::new(),
             next_child: 0,
+            call_location: Location::caller(),
         });
 
         Self {
@@ -274,6 +285,7 @@ impl DomInner {
     }
 }
 
+#[track_caller]
 fn next_widget(nodes: &mut Arena<DomNode>, parent_id: WidgetId) -> WidgetId {
     let parent = nodes.get_mut(parent_id.index()).unwrap();
     if parent.next_child < parent.children.len() {
@@ -286,6 +298,7 @@ fn next_widget(nodes: &mut Arena<DomNode>, parent_id: WidgetId) -> WidgetId {
             parent: Some(parent_id),
             children: Vec::new(),
             next_child: 0,
+            call_location: Location::caller(),
         });
 
         let id = WidgetId::new(index);

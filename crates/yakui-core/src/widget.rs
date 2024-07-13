@@ -89,6 +89,9 @@ pub trait Widget: 'static + fmt::Debug {
     /// Create the widget.
     fn new() -> Self;
 
+    /// Reset the widget when a switchup happens, from the old widget's state.
+    fn reset_state(&mut self) {}
+
     /// Update the widget with new props.
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response;
 
