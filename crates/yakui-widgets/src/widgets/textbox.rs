@@ -133,10 +133,6 @@ impl Widget for TextBoxWidget {
         }
     }
 
-    fn reset_state(&mut self) {
-        self.cosmic_editor.take();
-    }
-
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props = props;
 

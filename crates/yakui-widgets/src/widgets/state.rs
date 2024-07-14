@@ -77,10 +77,6 @@ impl<T: 'static> Widget for StateWidget<T> {
         Self { value: None }
     }
 
-    fn reset_state(&mut self) {
-        self.value.take();
-    }
-
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         let value = self
             .value
