@@ -1,9 +1,16 @@
-use yakui::{button, column, textbox, use_state};
+use yakui::{button, column, row, textbox, use_state};
 
 #[derive(Debug, Clone, Copy)]
 enum Page {
     A,
     B,
+}
+
+#[track_caller]
+fn rowded_textbox(initial_text: &str) {
+    row(|| {
+        textbox(initial_text, None);
+    });
 }
 
 pub fn run() {
@@ -19,12 +26,8 @@ pub fn run() {
         }
 
         match page.get() {
-            Page::A => {
-                textbox("a", None);
-            }
-            Page::B => {
-                textbox("b", None);
-            }
+            Page::A => rowded_textbox("a"),
+            Page::B => rowded_textbox("b"),
         };
     });
 }
