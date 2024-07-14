@@ -205,7 +205,13 @@ impl Dom {
     pub fn begin_widget<T: Widget>(&self, props: T::Props<'_>) -> Response<T::Response> {
         log::trace!("begin_widget::<{}>({props:#?}", type_name::<T>());
 
-        let (id, mut widget, callsite_different) = {
+        let parent_callsite_different = {
+            let node = self.get_current();
+
+            node.last_callsite_key != node.callsite_key
+        };
+
+        let (id, mut widget, current_callsite_different) = {
             let mut nodes = self.inner.nodes.borrow_mut();
             let id = next_widget(&mut nodes, self.current());
             self.inner.stack.borrow_mut().push(id);
@@ -227,7 +233,7 @@ impl Dom {
             }
 
             let widget = widget.downcast_mut::<T>().unwrap();
-            if callsite_different {
+            if parent_callsite_different || current_callsite_different {
                 widget.reset_state();
             }
 
@@ -241,7 +247,7 @@ impl Dom {
             node.widget = widget;
 
             node.last_callsite_key = node.callsite_key;
-            if node.call_location != Location::caller() {
+            if node.call_location != Location::caller() || parent_callsite_different {
                 node.callsite_key = node.callsite_key.wrapping_add(1);
             }
             node.call_location = Location::caller();
@@ -297,9 +303,8 @@ impl DomInner {
 #[track_caller]
 fn next_widget(nodes: &mut Arena<DomNode>, parent_id: WidgetId) -> WidgetId {
     let parent = nodes.get_mut(parent_id.index()).unwrap();
-    let callsite_key_diff = parent.callsite_key.wrapping_sub(parent.last_callsite_key);
 
-    let next = if parent.next_child < parent.children.len() {
+    if parent.next_child < parent.children.len() {
         let id = parent.children[parent.next_child];
         parent.next_child += 1;
         id
@@ -320,11 +325,7 @@ fn next_widget(nodes: &mut Arena<DomNode>, parent_id: WidgetId) -> WidgetId {
         parent.children.push(id);
         parent.next_child += 1;
         id
-    };
-
-    nodes.get_mut(next.index()).unwrap().callsite_key += callsite_key_diff;
-
-    next
+    }
 }
 
 /// Remove children from the given node that weren't present in the latest
