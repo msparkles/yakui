@@ -54,6 +54,8 @@ pub struct DomNode {
     next_child: usize,
 
     call_location: &'static Location<'static>,
+    last_callsite_key: usize,
+    callsite_key: usize,
 }
 
 impl Dom {
@@ -203,7 +205,7 @@ impl Dom {
     pub fn begin_widget<T: Widget>(&self, props: T::Props<'_>) -> Response<T::Response> {
         log::trace!("begin_widget::<{}>({props:#?}", type_name::<T>());
 
-        let (id, mut widget, call_location) = {
+        let (id, mut widget, callsite_different) = {
             let mut nodes = self.inner.nodes.borrow_mut();
             let id = next_widget(&mut nodes, self.current());
             self.inner.stack.borrow_mut().push(id);
@@ -215,7 +217,7 @@ impl Dom {
             let widget = replace(&mut node.widget, Box::new(DummyWidget));
 
             node.next_child = 0;
-            (id, widget, node.call_location)
+            (id, widget, node.last_callsite_key != node.callsite_key)
         };
 
         // Potentially recreate the widget, then update it.
@@ -225,7 +227,7 @@ impl Dom {
             }
 
             let widget = widget.downcast_mut::<T>().unwrap();
-            if call_location != Location::caller() {
+            if callsite_different {
                 widget.reset_state();
             }
 
@@ -237,6 +239,11 @@ impl Dom {
             let mut nodes = self.inner.nodes.borrow_mut();
             let node = nodes.get_mut(id.index()).unwrap();
             node.widget = widget;
+
+            node.last_callsite_key = node.callsite_key;
+            if node.call_location != Location::caller() {
+                node.callsite_key = node.callsite_key.wrapping_add(1);
+            }
             node.call_location = Location::caller();
         }
 
@@ -272,6 +279,8 @@ impl DomInner {
             children: Vec::new(),
             next_child: 0,
             call_location: Location::caller(),
+            last_callsite_key: 0,
+            callsite_key: 0,
         });
 
         Self {
@@ -288,7 +297,9 @@ impl DomInner {
 #[track_caller]
 fn next_widget(nodes: &mut Arena<DomNode>, parent_id: WidgetId) -> WidgetId {
     let parent = nodes.get_mut(parent_id.index()).unwrap();
-    if parent.next_child < parent.children.len() {
+    let callsite_key_diff = parent.callsite_key.wrapping_sub(parent.last_callsite_key);
+
+    let next = if parent.next_child < parent.children.len() {
         let id = parent.children[parent.next_child];
         parent.next_child += 1;
         id
@@ -299,6 +310,8 @@ fn next_widget(nodes: &mut Arena<DomNode>, parent_id: WidgetId) -> WidgetId {
             children: Vec::new(),
             next_child: 0,
             call_location: Location::caller(),
+            last_callsite_key: 0,
+            callsite_key: 0,
         });
 
         let id = WidgetId::new(index);
@@ -307,7 +320,11 @@ fn next_widget(nodes: &mut Arena<DomNode>, parent_id: WidgetId) -> WidgetId {
         parent.children.push(id);
         parent.next_child += 1;
         id
-    }
+    };
+
+    nodes.get_mut(next.index()).unwrap().callsite_key += callsite_key_diff;
+
+    next
 }
 
 /// Remove children from the given node that weren't present in the latest
