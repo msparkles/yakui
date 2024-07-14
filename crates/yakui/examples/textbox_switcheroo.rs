@@ -9,7 +9,11 @@ enum Page {
 #[track_caller]
 fn rowded_textbox(initial_text: &str) {
     row(|| {
-        textbox(initial_text, None);
+        row(|| {
+            row(|| {
+                textbox(initial_text, None);
+            });
+        });
     });
 }
 
